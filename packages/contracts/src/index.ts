@@ -93,11 +93,20 @@ export const MonopolySummarySchema = z
   .strict();
 export type MonopolySummary = z.infer<typeof MonopolySummarySchema>;
 
+export const DailyInventorySchema = z
+  .object({
+    date: DateStringSchema,
+    count: z.number().int().safe().nonnegative(),
+  })
+  .strict();
+export type DailyInventory = z.infer<typeof DailyInventorySchema>;
+
 export const AvailabilitySummarySchema = z
   .object({
     soldOutAtSomePoint: z.number().int().safe().nonnegative(),
     inStockAtSomePoint: z.number().int().safe().nonnegative(),
     currentlyInStock: z.number().int().safe().nonnegative(),
+    bottlesByDate: z.array(DailyInventorySchema),
   })
   .strict();
 export type AvailabilitySummary = z.infer<typeof AvailabilitySummarySchema>;
@@ -111,14 +120,6 @@ export const MonopolyCatalogItemSchema = MonopolySummarySchema.extend({
   availability: AvailabilitySummarySchema,
 }).strict();
 export type MonopolyCatalogItem = z.infer<typeof MonopolyCatalogItemSchema>;
-
-export const DailyInventorySchema = z
-  .object({
-    date: DateStringSchema,
-    count: z.number().int().safe().nonnegative(),
-  })
-  .strict();
-export type DailyInventory = z.infer<typeof DailyInventorySchema>;
 
 export const FreshnessSchema = z
   .object({

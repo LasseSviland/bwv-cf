@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   DailyInventorySchema,
   type AvailabilitySummary,
+  type DailyInventory,
   type MonopolyCatalogItem,
   type MonopolySummary,
   type Period,
@@ -51,7 +52,7 @@ const MonthlyMonopolyProjectionSchema = z
 
 export interface RelatedInventory {
   relatedId: number;
-  dates: string[];
+  inventory: DailyInventory[];
 }
 
 function coveredDates(period: Period, published: readonly PublishedMonthRow[]): string[] {
@@ -68,16 +69,24 @@ export function summarizeAvailability(
   validRelatedIds?: ReadonlySet<number>,
 ): AvailabilitySummary {
   if (knownDates.length === 0) {
-    return { soldOutAtSomePoint: 0, inStockAtSomePoint: 0, currentlyInStock: 0 };
+    return {
+      soldOutAtSomePoint: 0,
+      inStockAtSomePoint: 0,
+      currentlyInStock: 0,
+      bottlesByDate: [],
+    };
   }
   const latestDate = knownDates.at(-1);
   const knownDateSet = new Set(knownDates);
   const observations = new Map<number, Set<string>>();
+  const bottleTotals = new Map(knownDates.map((date) => [date, 0]));
   for (const entry of entries) {
     if (validRelatedIds !== undefined && !validRelatedIds.has(entry.relatedId)) continue;
     const dates = observations.get(entry.relatedId) ?? new Set<string>();
-    entry.dates.forEach((date) => {
-      if (knownDateSet.has(date)) dates.add(date);
+    entry.inventory.forEach(({ date, count }) => {
+      if (!knownDateSet.has(date)) return;
+      dates.add(date);
+      bottleTotals.set(date, (bottleTotals.get(date) ?? 0) + count);
     });
     observations.set(entry.relatedId, dates);
   }
@@ -89,6 +98,7 @@ export function summarizeAvailability(
       latestDate === undefined
         ? 0
         : [...observations.values()].filter((dates) => dates.has(latestDate)).length,
+    bottlesByDate: knownDates.map((date) => ({ date, count: bottleTotals.get(date) ?? 0 })),
   };
 }
 
@@ -129,9 +139,9 @@ export async function summarizeWines(
       for (const monopoly of projection.monopolies) {
         entries.push({
           relatedId: monopoly.monopolyId,
-          dates: monopoly.inventory
-            .map(({ date }) => date)
-            .filter((date) => date >= period.from && date <= period.to),
+          inventory: monopoly.inventory.filter(
+            ({ date }) => date >= period.from && date <= period.to,
+          ),
         });
       }
     }
@@ -160,9 +170,7 @@ export async function summarizeMonopolies(
       for (const wine of projection.wines) {
         entries.push({
           relatedId: wine.wineId,
-          dates: wine.inventory
-            .map(({ date }) => date)
-            .filter((date) => date >= period.from && date <= period.to),
+          inventory: wine.inventory.filter(({ date }) => date >= period.from && date <= period.to),
         });
       }
     }

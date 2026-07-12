@@ -6,10 +6,10 @@ All endpoints are under `/api/v1` and require `Authorization: Bearer <API_KEY>`.
 
 - `GET /status` — published month coverage and freshness.
 - `GET /health` — binding/process health without contacting MySQL.
-- `GET /wines?query=&cursor=&limit=&from=&to=` — Better Wines catalog search with per-wine counts for monopolies sold out, in stock during the period, and in stock on the latest covered day.
+- `GET /wines?query=&cursor=&limit=&from=&to=` — Better Wines catalog search with per-wine relation counts and the total number of bottles across monopolies for every covered date.
 - `GET /wines/:wineId` — wine metadata.
 - `GET /wines/:wineId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — daily stock for every store that stocked the wine during the period.
-- `GET /monopolies?query=&cursor=&limit=&from=&to=` — Vinmonopolet search with per-store counts for Better Wines products sold out, in stock during the period, and in stock on the latest covered day.
+- `GET /monopolies?query=&cursor=&limit=&from=&to=` — Vinmonopolet search with per-store relation counts and the total number of Better Wines bottles for every covered date.
 - `GET /monopolies/:monopolyId` — store metadata.
 - `GET /monopolies/:monopolyId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — one bulk response containing every stocked wine and its daily series.
 

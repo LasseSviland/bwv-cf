@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogResponse } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
@@ -20,8 +20,11 @@ interface CatalogBrowserProps<T> {
     values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string },
     signal?: AbortSignal,
   ) => Promise<CatalogResponse<T>>;
+  sortItems?: (left: T, right: T) => number;
   renderItem: (item: T, period: { from: string; to: string }) => ReactNode;
 }
+
+const PAGE_SIZE = 75;
 
 export const CatalogBrowser = <T,>({
   kind,
@@ -32,6 +35,7 @@ export const CatalogBrowser = <T,>({
   emptyTitle,
   emptyDescription,
   load,
+  sortItems,
   renderItem,
 }: CatalogBrowserProps<T>) => {
   const { apiKey, status } = useAuth();
@@ -40,9 +44,8 @@ export const CatalogBrowser = <T,>({
   const query = searchParams.get("q") ?? "";
   const [draft, setDraft] = useState(query);
   const [items, setItems] = useState<T[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [error, setError] = useState<Error | null>(null);
   const [revision, setRevision] = useState(0);
 
@@ -53,15 +56,31 @@ export const CatalogBrowser = <T,>({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    void load(
-      apiKey,
-      { query: query || undefined, limit: 30, from: period.from, to: period.to },
-      controller.signal,
-    )
-      .then((result) => {
+    setItems([]);
+    setVisibleCount(PAGE_SIZE);
+    void (async () => {
+      const allItems: T[] = [];
+      let cursor: string | undefined;
+      do {
+        const result = await load(
+          apiKey,
+          {
+            query: query || undefined,
+            cursor,
+            limit: PAGE_SIZE,
+            from: period.from,
+            to: period.to,
+          },
+          controller.signal,
+        );
+        allItems.push(...result.items);
+        cursor = result.nextCursor ?? undefined;
+      } while (cursor && !controller.signal.aborted);
+      return allItems;
+    })()
+      .then((allItems) => {
         if (controller.signal.aborted) return;
-        setItems(result.items);
-        setNextCursor(result.nextCursor ?? null);
+        setItems(allItems);
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
@@ -76,33 +95,18 @@ export const CatalogBrowser = <T,>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, period.from, period.to, query, revision]);
 
+  const sortedItems = useMemo(
+    () => (sortItems ? [...items].sort(sortItems) : items),
+    [items, sortItems],
+  );
+  const visibleItems = sortedItems.slice(0, visibleCount);
+
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const params = new URLSearchParams(searchParams);
     if (draft.trim()) params.set("q", draft.trim());
     else params.delete("q");
     setSearchParams(params);
-  };
-
-  const loadMore = async () => {
-    if (!apiKey || !nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const result = await load(apiKey, {
-        query: query || undefined,
-        cursor: nextCursor,
-        limit: 30,
-        from: period.from,
-        to: period.to,
-      });
-      setItems((current) => [...current, ...result.items]);
-      setNextCursor(result.nextCursor ?? null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason : new Error("Unknown API error"));
-    } finally {
-      setLoadingMore(false);
-    }
   };
 
   return (
@@ -149,7 +153,11 @@ export const CatalogBrowser = <T,>({
         </div>
       ) : null}
 
-      {loading ? <LoadingState label={`Loading ${kind}…`} /> : null}
+      {!loading && items.length > 0 ? (
+        <p className="catalog-result-count">{items.length.toLocaleString("en-GB")} results</p>
+      ) : null}
+
+      {loading ? <LoadingState label={`Ranking ${kind}…`} /> : null}
       {!loading && error && items.length === 0 ? (
         <ErrorState error={error} onRetry={() => setRevision((value) => value + 1)} />
       ) : null}
@@ -158,19 +166,16 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {items.length > 0 ? (
         <>
-          <div className="catalog-list">{items.map((item) => renderItem(item, period))}</div>
+          <div className="catalog-list">{visibleItems.map((item) => renderItem(item, period))}</div>
           <div className="load-more-row">
             {error ? <p className="form-error">{error.message}</p> : null}
-            {nextCursor ? (
+            {visibleCount < sortedItems.length ? (
               <button
                 className="button button--secondary"
                 type="button"
-                onClick={() => {
-                  void loadMore();
-                }}
-                disabled={loadingMore}
+                onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
               >
-                {loadingMore ? "Loading…" : "Load more"}
+                Show more
               </button>
             ) : (
               <span className="end-of-results">You’ve reached the end of the results.</span>

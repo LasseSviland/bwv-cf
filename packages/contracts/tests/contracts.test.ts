@@ -213,6 +213,10 @@ describe("catalog and status schemas", () => {
       soldOutAtSomePoint: 2,
       inStockAtSomePoint: 4,
       currentlyInStock: 1,
+      bottlesByDate: [
+        { date: "2026-07-11", count: 8 },
+        { date: "2026-07-12", count: 3 },
+      ],
     };
     const numbers = CatalogResponseSchema(z.number().int());
     expect(numbers.parse({ items: [1, 2], nextCursor: "cursor" })).toEqual({

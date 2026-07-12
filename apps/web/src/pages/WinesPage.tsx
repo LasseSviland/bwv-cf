@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Period, WineCatalogItem } from "../api/types";
+import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 
 const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) => {
@@ -14,17 +15,7 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
         </h2>
         <p>{wine.country || "Country not listed"}</p>
       </div>
-      <div className="catalog-row__stats" aria-label={`Stock summary for ${wine.name}`}>
-        <span>
-          <strong>{wine.availability.soldOutAtSomePoint}</strong> stores sold out
-        </span>
-        <span>
-          <strong>{wine.availability.inStockAtSomePoint}</strong> stores in stock
-        </span>
-        <span>
-          <strong>{wine.availability.currentlyInStock}</strong> in stock now
-        </span>
-      </div>
+      <BottleHistory inventory={wine.availability.bottlesByDate} label={wine.name} />
       <Link className="catalog-card__arrow" to={href} aria-label={`Open ${wine.name}`}>
         →
       </Link>
@@ -42,6 +33,11 @@ export const WinesPage = () => (
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
+    sortItems={(left, right) =>
+      right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
+      right.availability.currentlyInStock - left.availability.currentlyInStock ||
+      left.name.localeCompare(right.name, "en")
+    }
     renderItem={(wine, period) => <WineRow key={wine.id} wine={wine} period={period} />}
   />
 );

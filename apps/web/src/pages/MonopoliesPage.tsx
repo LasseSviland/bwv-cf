@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { MonopolyCatalogItem, Period } from "../api/types";
+import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 
 const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; period: Period }) => {
@@ -13,19 +14,9 @@ const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; peri
         <h2>
           <Link to={href}>{monopoly.name}</Link>
         </h2>
-        <p>{location || "Location not listed"}</p>
+        {location ? <p>{location}</p> : null}
       </div>
-      <div className="catalog-row__stats" aria-label={`Stock summary for ${monopoly.name}`}>
-        <span>
-          <strong>{monopoly.availability.soldOutAtSomePoint}</strong> wines sold out
-        </span>
-        <span>
-          <strong>{monopoly.availability.inStockAtSomePoint}</strong> wines in stock
-        </span>
-        <span>
-          <strong>{monopoly.availability.currentlyInStock}</strong> in stock now
-        </span>
-      </div>
+      <BottleHistory inventory={monopoly.availability.bottlesByDate} label={monopoly.name} />
       <Link className="catalog-card__arrow" to={href} aria-label={`Open ${monopoly.name}`}>
         →
       </Link>
@@ -43,6 +34,11 @@ export const MonopoliesPage = () => (
     emptyTitle="No monopolies found"
     emptyDescription="Try another store name, number, postcode or city."
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
+    sortItems={(left, right) =>
+      right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
+      right.availability.currentlyInStock - left.availability.currentlyInStock ||
+      left.name.localeCompare(right.name, "nb-NO")
+    }
     renderItem={(monopoly, period) => (
       <MonopolyRow key={monopoly.id} monopoly={monopoly} period={period} />
     )}

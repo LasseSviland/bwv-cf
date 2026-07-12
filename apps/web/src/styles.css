@@ -950,6 +950,12 @@ label {
   font-size: 0.82rem;
 }
 
+.catalog-result-count {
+  margin: -0.5rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
 /* Date controls and freshness */
 
 .freshness {
@@ -2071,7 +2077,7 @@ label {
 
 .catalog-row {
   display: grid;
-  grid-template-columns: minmax(13rem, 1.4fr) minmax(27rem, 1fr) auto;
+  grid-template-columns: minmax(13rem, 0.7fr) minmax(0, 2fr) auto;
   align-items: center;
   gap: 1.5rem;
   min-width: 0;
@@ -2104,23 +2110,63 @@ label {
   white-space: nowrap;
 }
 
-.catalog-row__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
+.bottle-history {
+  min-width: 0;
 }
 
-.catalog-row__stats span {
+.bottle-history__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
   color: var(--ink-soft);
-  font-size: 0.72rem;
-  line-height: 1.25;
+  font-size: 0.68rem;
 }
 
-.catalog-row__stats strong {
-  display: block;
-  margin-bottom: 0.16rem;
+.bottle-history__summary strong {
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 0.72rem;
+}
+
+.bottle-history__days {
+  display: flex;
+  gap: 0.2rem;
+  padding-bottom: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.bottle-history__day {
+  display: grid;
+  width: 2.8rem;
+  min-width: 2.8rem;
+  min-height: 2.6rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--paper-muted);
+}
+
+.bottle-history__day.is-in {
+  border-color: #9bc9ad;
+  background: var(--stock-soft);
+  color: var(--stock-strong);
+}
+
+.bottle-history__day.is-out {
+  background: var(--sold-soft);
+  color: var(--sold);
+}
+
+.bottle-history__day small {
+  color: inherit;
+  font-size: 0.52rem;
+  line-height: 1;
+}
+
+.bottle-history__day strong {
+  font-size: 0.72rem;
+  line-height: 1;
 }
 
 .overview-stats {
@@ -2239,7 +2285,7 @@ label {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .catalog-row__stats {
+  .bottle-history {
     grid-column: 1 / -1;
     grid-row: 2;
   }
@@ -2261,10 +2307,6 @@ label {
 
   .overview-stats > div:last-child {
     border-bottom: 0;
-  }
-
-  .catalog-row__stats {
-    gap: 0.5rem;
   }
 
   .summary-bar {
