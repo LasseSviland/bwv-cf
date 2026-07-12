@@ -61,6 +61,7 @@
     "crons": ["0 */6 * * *"],
   },
   "limits": {
+    "subrequests": 15000,
     "cpu_ms": 300000,
   },
   "observability": {

@@ -42,6 +42,7 @@ export const WinesPage = () => (
     searchPlaceholder="Wine name or product number"
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
+    pageSize={1_000}
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
     sortItems={(left, right) =>
       right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||

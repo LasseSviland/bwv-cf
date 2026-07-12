@@ -20,6 +20,7 @@ interface CatalogBrowserProps<T> {
   searchPlaceholder: string;
   emptyTitle: string;
   emptyDescription: string;
+  pageSize?: number;
   load: (
     apiKey: string,
     values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string },
@@ -29,7 +30,7 @@ interface CatalogBrowserProps<T> {
   renderItem: (item: T, period: { from: string; to: string }) => ReactNode;
 }
 
-const PAGE_SIZE = 75;
+const DISPLAY_PAGE_SIZE = 75;
 
 export const CatalogBrowser = <T,>({
   kind,
@@ -39,6 +40,7 @@ export const CatalogBrowser = <T,>({
   searchPlaceholder,
   emptyTitle,
   emptyDescription,
+  pageSize = DISPLAY_PAGE_SIZE,
   load,
   sortItems,
   renderItem,
@@ -50,7 +52,7 @@ export const CatalogBrowser = <T,>({
   const [draft, setDraft] = useState(query);
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
   const [error, setError] = useState<Error | null>(null);
   const [revision, setRevision] = useState(0);
 
@@ -62,7 +64,7 @@ export const CatalogBrowser = <T,>({
     setLoading(true);
     setError(null);
     setItems([]);
-    setVisibleCount(PAGE_SIZE);
+    setVisibleCount(DISPLAY_PAGE_SIZE);
     void (async () => {
       const allItems: T[] = [];
       let cursor: string | undefined;
@@ -72,7 +74,7 @@ export const CatalogBrowser = <T,>({
           {
             query: query || undefined,
             cursor,
-            limit: PAGE_SIZE,
+            limit: pageSize,
             from: period.from,
             to: period.to,
           },
@@ -98,7 +100,7 @@ export const CatalogBrowser = <T,>({
     return () => controller.abort();
     // `load` is a stable API method; query and revision are the request identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, period.from, period.to, query, revision]);
+  }, [apiKey, pageSize, period.from, period.to, query, revision]);
 
   const sortedItems = useMemo(
     () => (sortItems ? [...items].sort(sortItems) : items),
@@ -188,7 +190,7 @@ export const CatalogBrowser = <T,>({
               <Button
                 variant="outline"
                 type="button"
-                onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
+                onClick={() => setVisibleCount((current) => current + DISPLAY_PAGE_SIZE)}
               >
                 Show more
               </Button>

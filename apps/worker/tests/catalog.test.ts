@@ -53,6 +53,7 @@ describe("catalog query helpers", () => {
     expect(() => parseEntityId("1.5")).toThrow("Invalid entity id");
     expect(parseCatalogLimit(undefined)).toBe(50);
     expect(parseCatalogLimit("100")).toBe(100);
-    expect(() => parseCatalogLimit("101")).toThrow("between 1 and 100");
+    expect(parseCatalogLimit("1000")).toBe(1000);
+    expect(() => parseCatalogLimit("1001")).toThrow("between 1 and 1000");
   });
 });

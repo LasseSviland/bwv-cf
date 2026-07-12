@@ -4,7 +4,7 @@ import { CursorError, nextCatalogCursor, resolveCatalogCursor } from "@bwv/data-
 import { HttpError } from "../errors";
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 1_000;
 
 function normalized(value: string): string {
   return value.trim().toLocaleLowerCase("nb-NO");

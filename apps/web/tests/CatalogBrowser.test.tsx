@@ -52,4 +52,31 @@ describe("CatalogBrowser", () => {
       [...container.querySelectorAll("[data-catalog-item]")].map((item) => item.textContent),
     ).toEqual(["4", "3", "2", "1"]);
   });
+
+  it("uses the requested API page size without rendering every item at once", async () => {
+    const load = vi.fn((apiKey, values: { cursor?: string }) => {
+      void apiKey;
+      void values;
+      return Promise.resolve({ items: [1, 2], nextCursor: null });
+    });
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <CatalogBrowser
+          kind="items"
+          title="Items"
+          description="Paged items"
+          searchLabel="Search items"
+          searchPlaceholder="Search"
+          emptyTitle="No items"
+          emptyDescription="Nothing found"
+          pageSize={1000}
+          load={load}
+          renderItem={(item) => <span key={item}>{item}</span>}
+        />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    expect(load.mock.calls[0]?.[1]).toMatchObject({ limit: 1000, cursor: undefined });
+  });
 });

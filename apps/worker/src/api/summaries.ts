@@ -55,6 +55,8 @@ export interface RelatedInventory {
   inventory: DailyInventory[];
 }
 
+const SUMMARY_BATCH_SIZE = 25;
+
 function coveredDates(period: Period, published: readonly PublishedMonthRow[]): string[] {
   const byMonth = new Map(published.map((row) => [row.month, row]));
   return enumerateDates(period.from, period.to, 366).filter((date) => {
@@ -105,10 +107,11 @@ export function summarizeAvailability(
 async function inBatches<T, R>(
   values: readonly T[],
   operation: (value: T) => Promise<R>,
+  batchSize = SUMMARY_BATCH_SIZE,
 ): Promise<R[]> {
   const results: R[] = [];
-  for (let offset = 0; offset < values.length; offset += 10) {
-    results.push(...(await Promise.all(values.slice(offset, offset + 10).map(operation))));
+  for (let offset = 0; offset < values.length; offset += batchSize) {
+    results.push(...(await Promise.all(values.slice(offset, offset + batchSize).map(operation))));
   }
   return results;
 }
@@ -122,6 +125,28 @@ async function summaryContext(env: Env, period: Period) {
   return { published, knownDates: coveredDates(period, published) };
 }
 
+export async function readWineProjectionEntries(
+  bucket: R2Bucket,
+  published: readonly Pick<PublishedMonthRow, "month" | "generation">[],
+  wineId: number,
+  period: Period,
+): Promise<RelatedInventory[]> {
+  const projections = await Promise.all(
+    published.map(async (month) => {
+      const object = await bucket.get(wineProjectionKey(month.month, month.generation, wineId));
+      if (object === null) return [];
+      const projection = MonthlyWineProjectionSchema.parse(await object.json<unknown>());
+      return projection.monopolies.map((monopoly) => ({
+        relatedId: monopoly.monopolyId,
+        inventory: monopoly.inventory.filter(
+          ({ date }) => date >= period.from && date <= period.to,
+        ),
+      }));
+    }),
+  );
+  return projections.flat();
+}
+
 export async function summarizeWines(
   env: Env,
   wines: readonly WineSummary[],
@@ -129,22 +154,7 @@ export async function summarizeWines(
 ): Promise<WineCatalogItem[]> {
   const { published, knownDates } = await summaryContext(env, period);
   return inBatches(wines, async (wine) => {
-    const entries: RelatedInventory[] = [];
-    for (const month of published) {
-      const object = await env.DATA_BUCKET.get(
-        wineProjectionKey(month.month, month.generation, wine.id),
-      );
-      if (object === null) continue;
-      const projection = MonthlyWineProjectionSchema.parse(await object.json<unknown>());
-      for (const monopoly of projection.monopolies) {
-        entries.push({
-          relatedId: monopoly.monopolyId,
-          inventory: monopoly.inventory.filter(
-            ({ date }) => date >= period.from && date <= period.to,
-          ),
-        });
-      }
-    }
+    const entries = await readWineProjectionEntries(env.DATA_BUCKET, published, wine.id, period);
     return { ...wine, availability: summarizeAvailability(entries, knownDates) };
   });
 }
