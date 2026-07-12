@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from "react";
 import type { Period } from "../api/types";
 import {
-  currentMonthPeriod,
   defaultPeriod,
   isValidPeriod,
-  previousMonthPeriod,
+  lastTwoMonthsPeriod,
   todayInOslo,
   yearToDatePeriod,
 } from "../utils/dates";
@@ -25,10 +24,9 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
   const draft = draftOverride ?? period;
 
   const presets = [
-    { label: "This month", value: currentMonthPeriod(today) },
-    { label: "Previous month", value: previousMonthPeriod(today) },
-    { label: "Last 2 months", value: defaultPeriod(today) },
-    { label: "Year to date", value: yearToDatePeriod(today) },
+    { label: "Last 30 days", value: defaultPeriod(today) },
+    { label: "Last 2 months", value: lastTwoMonthsPeriod(today) },
+    { label: "This year", value: yearToDatePeriod(today) },
   ];
 
   const submit = (event: FormEvent<HTMLFormElement>) => {

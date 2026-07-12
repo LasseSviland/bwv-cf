@@ -61,11 +61,16 @@ describe("monthly projections", () => {
     expect(projections[0]?.wines.map(({ wineId }) => wineId)).toEqual([1, 2]);
   });
 
-  it("rejects orphan references", () => {
-    const rows = chunk([{ id: 1, date: 20260701, count: 2, wineId: 999, monopolyId: 10 }]);
+  it("excludes wines outside the Better Wines catalog and still rejects orphan stores", () => {
+    const otherImporter = chunk([{ id: 1, date: 20260701, count: 2, wineId: 999, monopolyId: 10 }]);
+    expect(
+      buildWineProjections([otherImporter], "2026-07", projectionBucket(999), wineIds, monopolyIds),
+    ).toEqual([]);
+
+    const orphanStore = chunk([{ id: 1, date: 20260701, count: 2, wineId: 1, monopolyId: 999 }]);
     expect(() =>
-      buildWineProjections([rows], "2026-07", projectionBucket(999), wineIds, monopolyIds),
-    ).toThrow("Orphan inventory wine_id 999");
+      buildWineProjections([orphanStore], "2026-07", projectionBucket(1), wineIds, monopolyIds),
+    ).toThrow("Orphan inventory monopoly_id 999");
   });
 
   it("rejects negative raw counts before projection", () => {

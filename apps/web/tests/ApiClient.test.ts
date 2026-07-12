@@ -16,7 +16,19 @@ const mockFetch = (body: unknown, status = 200) => {
 describe("API contract validation", () => {
   it("returns a catalog only after it passes the shared wine catalog schema", async () => {
     const fetchMock = mockFetch({
-      items: [{ id: 7, productNumber: "123456", name: "Langhe Nebbiolo", country: "Italy" }],
+      items: [
+        {
+          id: 7,
+          productNumber: "123456",
+          name: "Langhe Nebbiolo",
+          country: "Italy",
+          availability: {
+            soldOutAtSomePoint: 2,
+            inStockAtSomePoint: 4,
+            currentlyInStock: 1,
+          },
+        },
+      ],
       nextCursor: null,
     });
 

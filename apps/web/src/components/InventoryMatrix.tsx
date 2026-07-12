@@ -7,6 +7,7 @@ import {
   groupDatesByMonth,
   inventoryMap,
   isInventoryDateAvailable,
+  latestAvailableDate,
   latestCount,
   stockDays,
 } from "../utils/dates";
@@ -138,8 +139,9 @@ export const InventoryMatrix = ({
 
       <div className="mobile-inventory-list">
         {rows.map((row) => {
-          const latestAvailable = isInventoryDateAvailable(to, freshness);
-          const count = latestCount(row.inventory, to);
+          const latestDate = latestAvailableDate(from, to, freshness);
+          const latestAvailable = latestDate !== null;
+          const count = latestDate ? latestCount(row.inventory, latestDate) : 0;
           const availableDays = stockDays(row.inventory);
           const observations = inventoryMap(row.inventory);
           return (
@@ -171,7 +173,12 @@ export const InventoryMatrix = ({
                 <span>
                   <strong>{availableDays}</strong> in-stock day{availableDays === 1 ? "" : "s"}
                 </span>
-                <span>Latest day · {formatDate(to, { day: "numeric", month: "short" })}</span>
+                <span>
+                  Latest day ·{" "}
+                  {latestDate
+                    ? formatDate(latestDate, { day: "numeric", month: "short" })
+                    : "unavailable"}
+                </span>
               </div>
               <div className="stock-strip" aria-label={`Availability strip for ${row.label}`}>
                 {dates.map((date) => {
@@ -197,7 +204,7 @@ export const InventoryMatrix = ({
                 })}
               </div>
               <Link className="text-link" to={row.href}>
-                Open daily calendar <span aria-hidden="true">→</span>
+                Open {entityLabel.toLocaleLowerCase()} <span aria-hidden="true">→</span>
               </Link>
             </article>
           );

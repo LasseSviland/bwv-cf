@@ -24,6 +24,7 @@ import {
 import { errorResponse, jsonWithEtag } from "./http";
 import { assembleMonopolyInventory, assembleWineInventory } from "./inventory";
 import { getStatus } from "./status";
+import { summarizeMonopolies, summarizeWines } from "./summaries";
 
 type AppBindings = { Bindings: Env; Variables: { requestId: string } };
 
@@ -113,12 +114,17 @@ app.get("/api/v1/status", async (context) => {
 
 app.get("/api/v1/wines", async (context) => {
   const catalog = await getWineCatalog(context.env);
-  const response = searchWineCatalog(
+  const catalogPage = searchWineCatalog(
     catalog,
     context.req.query("query"),
     context.req.query("cursor"),
     parseCatalogLimit(context.req.query("limit")),
   );
+  const period = periodFromUrl(context.req.url);
+  const response = {
+    ...catalogPage,
+    items: await summarizeWines(context.env, catalogPage.items, period),
+  };
   return jsonWithEtag(context.req.raw, response, `wines:${JSON.stringify(response)}`);
 });
 
@@ -137,12 +143,17 @@ app.get("/api/v1/wines/:wineId", async (context) => {
 
 app.get("/api/v1/monopolies", async (context) => {
   const catalog = await getMonopolyCatalog(context.env);
-  const response = searchMonopolyCatalog(
+  const catalogPage = searchMonopolyCatalog(
     catalog,
     context.req.query("query"),
     context.req.query("cursor"),
     parseCatalogLimit(context.req.query("limit")),
   );
+  const period = periodFromUrl(context.req.url);
+  const response = {
+    ...catalogPage,
+    items: await summarizeMonopolies(context.env, catalogPage.items, period),
+  };
   return jsonWithEtag(context.req.raw, response, `monopolies:${JSON.stringify(response)}`);
 });
 

@@ -2036,3 +2036,231 @@ label {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Compact inventory workspace */
+
+.page-header h1 {
+  font-size: clamp(2.25rem, 4vw, 3.6rem);
+}
+
+.page-header__description {
+  max-width: 42rem;
+}
+
+.period-picker {
+  padding: 0 0 1.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalog-search {
+  max-width: 46rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.catalog-list {
+  border-top: 1px solid var(--line-strong);
+}
+
+.catalog-row {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1.4fr) minmax(27rem, 1fr) auto;
+  align-items: center;
+  gap: 1.5rem;
+  min-width: 0;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.catalog-row__identity {
+  min-width: 0;
+}
+
+.catalog-row__identity h2 {
+  overflow: hidden;
+  margin: 0.1rem 0 0.22rem;
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-row__identity h2 a {
+  text-decoration: none;
+}
+
+.catalog-row__identity > p:last-child {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-row__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.catalog-row__stats span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.catalog-row__stats strong {
+  display: block;
+  margin-bottom: 0.16rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.overview-stats > div {
+  display: flex;
+  min-height: 10rem;
+  padding: 1.5rem;
+  border-right: 1px solid var(--line);
+  flex-direction: column;
+}
+
+.overview-stats > div:first-child {
+  padding-left: 0;
+}
+
+.overview-stats > div:last-child {
+  padding-right: 0;
+  border-right: 0;
+}
+
+.overview-stats strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.6rem, 5vw, 4rem);
+  font-weight: 500;
+}
+
+.overview-stats span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.overview-stats a,
+.overview-stats small {
+  margin-top: auto;
+  color: var(--forest-bright);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.coverage-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.summary-bar strong {
+  margin-right: 0.2rem;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.filter-panel {
+  grid-template-columns: auto minmax(13rem, 26rem) auto auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.toggle-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toggle-control input[type="checkbox"] {
+  width: 1rem;
+  min-height: 1rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--forest);
+  box-shadow: none;
+}
+
+@media (max-width: 860px) {
+  .catalog-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .catalog-row__stats {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 680px) {
+  .overview-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-stats > div,
+  .overview-stats > div:first-child,
+  .overview-stats > div:last-child {
+    min-height: 8rem;
+    padding: 1.15rem 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .overview-stats > div:last-child {
+    border-bottom: 0;
+  }
+
+  .catalog-row__stats {
+    gap: 0.5rem;
+  }
+
+  .summary-bar {
+    align-items: flex-start;
+    gap: 0.55rem;
+    flex-direction: column;
+  }
+
+  .filter-panel {
+    grid-template-columns: 1fr auto;
+  }
+
+  .filter-panel > label:first-child,
+  .filter-panel > input,
+  .toggle-control {
+    grid-column: 1 / -1;
+  }
+}

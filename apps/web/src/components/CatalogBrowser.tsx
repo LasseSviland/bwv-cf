@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogResponse } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
+import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import { EmptyState, ErrorState, LoadingState } from "./AsyncState";
 import { PageHeader } from "./PageHeader";
+import { PeriodPicker } from "./PeriodPicker";
 
 interface CatalogBrowserProps<T> {
   kind: string;
@@ -15,10 +17,10 @@ interface CatalogBrowserProps<T> {
   emptyDescription: string;
   load: (
     apiKey: string,
-    values: { query?: string; cursor?: string; limit?: number },
+    values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string },
     signal?: AbortSignal,
   ) => Promise<CatalogResponse<T>>;
-  renderItem: (item: T) => ReactNode;
+  renderItem: (item: T, period: { from: string; to: string }) => ReactNode;
 }
 
 export const CatalogBrowser = <T,>({
@@ -32,7 +34,8 @@ export const CatalogBrowser = <T,>({
   load,
   renderItem,
 }: CatalogBrowserProps<T>) => {
-  const { apiKey } = useAuth();
+  const { apiKey, status } = useAuth();
+  const { period, setPeriod } = usePeriodSearch();
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
   const [draft, setDraft] = useState(query);
@@ -50,7 +53,11 @@ export const CatalogBrowser = <T,>({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    void load(apiKey, { query: query || undefined, limit: 50 }, controller.signal)
+    void load(
+      apiKey,
+      { query: query || undefined, limit: 30, from: period.from, to: period.to },
+      controller.signal,
+    )
       .then((result) => {
         if (controller.signal.aborted) return;
         setItems(result.items);
@@ -67,7 +74,7 @@ export const CatalogBrowser = <T,>({
     return () => controller.abort();
     // `load` is a stable API method; query and revision are the request identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, query, revision]);
+  }, [apiKey, period.from, period.to, query, revision]);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -85,7 +92,9 @@ export const CatalogBrowser = <T,>({
       const result = await load(apiKey, {
         query: query || undefined,
         cursor: nextCursor,
-        limit: 50,
+        limit: 30,
+        from: period.from,
+        to: period.to,
       });
       setItems((current) => [...current, ...result.items]);
       setNextCursor(result.nextCursor ?? null);
@@ -98,7 +107,12 @@ export const CatalogBrowser = <T,>({
 
   return (
     <div className="page-stack">
-      <PageHeader eyebrow="Browse" title={title} description={description} />
+      <PageHeader title={title} description={description} />
+      <PeriodPicker
+        period={period}
+        onChange={setPeriod}
+        availableMonths={status?.availableMonths}
+      />
       <form className="catalog-search" role="search" onSubmit={submit}>
         <label htmlFor={`${kind}-search`}>{searchLabel}</label>
         <div className="catalog-search__row">
@@ -125,7 +139,9 @@ export const CatalogBrowser = <T,>({
             type="button"
             onClick={() => {
               setDraft("");
-              setSearchParams({});
+              const params = new URLSearchParams(searchParams);
+              params.delete("q");
+              setSearchParams(params);
             }}
           >
             Clear search
@@ -142,7 +158,7 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {items.length > 0 ? (
         <>
-          <div className="catalog-grid">{items.map(renderItem)}</div>
+          <div className="catalog-list">{items.map((item) => renderItem(item, period))}</div>
           <div className="load-more-row">
             {error ? <p className="form-error">{error.message}</p> : null}
             {nextCursor ? (

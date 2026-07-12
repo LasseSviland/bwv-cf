@@ -6,6 +6,8 @@ The Worker serves a React SPA and `/api/v1` API from the edge. User-facing reque
 
 The inventory views distinguish three states: positive morning stock, sold out within known source coverage, and unavailable when a day or month has not been published yet.
 
+The UI defaults to the latest 30 Oslo calendar days and offers the latest two months, year to date, and custom date ranges. The wine catalog is limited to rows owned by Better Wines (`grossist = "Better Wines AS"`).
+
 ## Repository layout
 
 ```text

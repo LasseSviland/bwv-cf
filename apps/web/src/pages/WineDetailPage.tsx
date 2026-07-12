@@ -4,19 +4,24 @@ import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorState, LoadingState } from "../components/AsyncState";
-import { FreshnessBanner } from "../components/FreshnessBanner";
 import { InventoryMatrix, type InventoryRow } from "../components/InventoryMatrix";
 import { PageHeader } from "../components/PageHeader";
 import { PeriodPicker } from "../components/PeriodPicker";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
-import { formatDate, latestAvailableDate, latestCount, stockDays } from "../utils/dates";
+import {
+  formatDate,
+  latestAvailableDate,
+  latestCount,
+  wasSoldOutAtSomePoint,
+} from "../utils/dates";
 
 export const WineDetailPage = () => {
   const { wineId = "" } = useParams();
   const { status } = useAuth();
   const { period, setPeriod } = usePeriodSearch();
   const [filter, setFilter] = useState("");
+  const [soldOutOnly, setSoldOutOnly] = useState(false);
   const request = useApiQuery(`wine:${wineId}:${period.from}:${period.to}`, (apiKey, signal) =>
     api.getWineInventory(apiKey, wineId, period, signal),
   );
@@ -28,6 +33,16 @@ export const WineDetailPage = () => {
       latestAvailableDate(request.data.period.from, request.data.period.to, request.data) ??
       request.data.period.to;
     return request.data.monopolies
+      .filter(
+        ({ inventory }) =>
+          !soldOutOnly ||
+          wasSoldOutAtSomePoint(
+            inventory,
+            request.data!.period.from,
+            request.data!.period.to,
+            request.data!,
+          ),
+      )
       .filter(({ monopoly }) =>
         query
           ? [monopoly.name, monopoly.storeNumber, monopoly.city, monopoly.postalCode]
@@ -50,9 +65,9 @@ export const WineDetailPage = () => {
           .filter(Boolean)
           .join(" · "),
         inventory,
-        href: `/wines/${wineId}/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`,
+        href: `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`,
       }));
-  }, [filter, period.from, period.to, request.data, wineId]);
+  }, [filter, period.from, period.to, request.data, soldOutOnly]);
 
   if (request.loading && !request.data) return <LoadingState label="Loading wine availability…" />;
   if (request.error && !request.data)
@@ -70,10 +85,10 @@ export const WineDetailPage = () => {
     ? request.data.monopolies.filter(({ inventory }) => latestCount(inventory, latestDate) > 0)
         .length
     : null;
-  const totalStockDays = request.data.monopolies.reduce(
-    (total, entry) => total + stockDays(entry.inventory),
-    0,
-  );
+  const responsePeriod = request.data.period;
+  const soldOutStores = request.data.monopolies.filter(({ inventory }) =>
+    wasSoldOutAtSomePoint(inventory, responsePeriod.from, responsePeriod.to, freshness),
+  ).length;
 
   return (
     <div className="page-stack page-stack--wide">
@@ -90,32 +105,25 @@ export const WineDetailPage = () => {
             ? `${wine.country} · Daily inventory by monopoly`
             : "Daily inventory by monopoly"
         }
-        actions={<span className="entity-badge entity-badge--wine">Wine history</span>}
       />
 
-      <FreshnessBanner freshness={freshness} periodThrough={request.data.period.to} />
       <PeriodPicker
         period={period}
         onChange={setPeriod}
         availableMonths={status?.availableMonths}
       />
 
-      <section className="metric-grid" aria-label="Availability summary">
-        <div className="metric-card">
-          <span>Stores carried it</span>
-          <strong>{request.data.monopolies.length}</strong>
-          <small>At least once in this period</small>
-        </div>
-        <div className="metric-card metric-card--accent">
-          <span>In stock on latest available day</span>
-          <strong>{storesInStock ?? "—"}</strong>
-          <small>{latestDate ? formatDate(latestDate) : "No covered day in this period"}</small>
-        </div>
-        <div className="metric-card">
-          <span>Store-days in stock</span>
-          <strong>{totalStockDays.toLocaleString("en-GB")}</strong>
-          <small>Positive morning observations</small>
-        </div>
+      <section className="summary-bar" aria-label="Availability summary">
+        <span>
+          <strong>{request.data.monopolies.length}</strong> monopolies tracked
+        </span>
+        <span>
+          <strong>{soldOutStores}</strong> sold out during the period
+        </span>
+        <span>
+          <strong>{storesInStock ?? "—"}</strong> in stock{" "}
+          {latestDate ? `on ${formatDate(latestDate)}` : "now"}
+        </span>
       </section>
 
       <section className="filter-panel">
@@ -127,6 +135,14 @@ export const WineDetailPage = () => {
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
+        <label className="toggle-control">
+          <input
+            type="checkbox"
+            checked={soldOutOnly}
+            onChange={(event) => setSoldOutOnly(event.target.checked)}
+          />
+          Sold out at some point
+        </label>
         <span>{rows.length} shown</span>
       </section>
 

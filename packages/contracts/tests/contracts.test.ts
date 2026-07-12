@@ -209,18 +209,30 @@ describe("entity and inventory schemas", () => {
 
 describe("catalog and status schemas", () => {
   it("builds reusable and concrete catalog schemas", () => {
+    const availability = {
+      soldOutAtSomePoint: 2,
+      inStockAtSomePoint: 4,
+      currentlyInStock: 1,
+    };
     const numbers = CatalogResponseSchema(z.number().int());
     expect(numbers.parse({ items: [1, 2], nextCursor: "cursor" })).toEqual({
       items: [1, 2],
       nextCursor: "cursor",
     });
     expect(numbers.safeParse({ items: [1], nextCursor: undefined }).success).toBe(false);
-    expect(WineCatalogResponseSchema.parse({ items: [wine], nextCursor: null })).toEqual({
-      items: [wine],
+    expect(
+      WineCatalogResponseSchema.parse({ items: [{ ...wine, availability }], nextCursor: null }),
+    ).toEqual({
+      items: [{ ...wine, availability }],
       nextCursor: null,
     });
-    expect(MonopolyCatalogResponseSchema.parse({ items: [monopoly], nextCursor: null })).toEqual({
-      items: [monopoly],
+    expect(
+      MonopolyCatalogResponseSchema.parse({
+        items: [{ ...monopoly, availability }],
+        nextCursor: null,
+      }),
+    ).toEqual({
+      items: [{ ...monopoly, availability }],
       nextCursor: null,
     });
     expectTypeOf<CatalogResponse<WineSummary>>().toEqualTypeOf<{
@@ -233,12 +245,20 @@ describe("catalog and status schemas", () => {
     const status = {
       freshness,
       availableMonths: ["2024-01", "2024-02", "2026-07"],
+      catalog: { wines: 125, monopolies: 342 },
     };
     expect(StatusResponseSchema.parse(status)).toEqual(status);
     expectTypeOf(status).toMatchTypeOf<StatusResponse>();
-    expect(StatusResponseSchema.parse({ freshness: null, availableMonths: [] })).toEqual({
+    expect(
+      StatusResponseSchema.parse({
+        freshness: null,
+        availableMonths: [],
+        catalog: { wines: 0, monopolies: 0 },
+      }),
+    ).toEqual({
       freshness: null,
       availableMonths: [],
+      catalog: { wines: 0, monopolies: 0 },
     });
     expect(
       StatusResponseSchema.safeParse({ ...status, availableMonths: ["2024-01", "2024-01"] })

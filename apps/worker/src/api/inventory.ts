@@ -175,15 +175,17 @@ export async function assembleMonopolyInventory(
     monopoly,
     period,
     wines: [...series.entries()]
-      .map(([wineId, values]) => {
+      .flatMap(([wineId, values]) => {
         const wine = wineById.get(wineId);
-        if (wine === undefined) {
-          throw new HttpError(503, "dataset_invalid", "Dataset references an unknown wine");
-        }
-        return {
-          wine,
-          inventory: mergeAndZeroFillInventorySeries(values, period, { maxDays: 366 }),
-        };
+        // The catalog is the importer ownership boundary. Older monthly
+        // projections can still contain rows that predate that filter.
+        if (wine === undefined) return [];
+        return [
+          {
+            wine,
+            inventory: mergeAndZeroFillInventorySeries(values, period, { maxDays: 366 }),
+          },
+        ];
       })
       .sort((left, right) => left.wine.name.localeCompare(right.wine.name, "nb-NO")),
   };

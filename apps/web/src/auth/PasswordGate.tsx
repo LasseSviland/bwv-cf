@@ -77,7 +77,7 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
             </p>
           ) : (
             <p className="field-help" id="password-help">
-              Kept only for this browser tab session.
+              Saved in this browser until you log out.
             </p>
           )}
         </form>

@@ -139,7 +139,7 @@ describe("Europe/Oslo calendar helpers", () => {
 
   it("produces the product default period", () => {
     expect(defaultPeriodInOslo(new Date("2026-07-12T10:00:00.000Z"))).toEqual({
-      from: "2026-06-01",
+      from: "2026-06-13",
       to: "2026-07-12",
     });
     expect(() => dateInOslo(new Date("invalid"))).toThrow(CalendarFormatError);
@@ -151,7 +151,7 @@ describe("query period validation", () => {
 
   it("applies Oslo defaults and independently accepts explicit bounds", () => {
     expect(validateQueryPeriod({}, { now })).toEqual({
-      from: "2026-06-01",
+      from: "2026-06-13",
       to: "2026-07-12",
     });
     expect(validateQueryPeriod({ from: "2026-07-01" }, { now })).toEqual({

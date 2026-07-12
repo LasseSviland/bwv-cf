@@ -22,27 +22,14 @@ export const addDays = (date: ISODate, days: number): ISODate => {
   return toIsoDate(value);
 };
 
-export const startOfMonth = (date: ISODate): ISODate => `${date.slice(0, 7)}-01`;
-
 export const defaultPeriod = (today = todayInOslo()): Period => {
-  const currentStart = new Date(`${startOfMonth(today)}T12:00:00Z`);
-  currentStart.setUTCMonth(currentStart.getUTCMonth() - 1);
-  return { from: toIsoDate(currentStart), to: today };
+  return { from: addDays(today, -29), to: today };
 };
 
-export const currentMonthPeriod = (today = todayInOslo()): Period => ({
-  from: startOfMonth(today),
+export const lastTwoMonthsPeriod = (today = todayInOslo()): Period => ({
+  from: addDays(today, -59),
   to: today,
 });
-
-export const previousMonthPeriod = (today = todayInOslo()): Period => {
-  const currentStart = new Date(`${startOfMonth(today)}T12:00:00Z`);
-  const previousStart = new Date(currentStart);
-  previousStart.setUTCMonth(previousStart.getUTCMonth() - 1);
-  const previousEnd = new Date(currentStart);
-  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
-  return { from: toIsoDate(previousStart), to: toIsoDate(previousEnd) };
-};
 
 export const yearToDatePeriod = (today = todayInOslo()): Period => ({
   from: `${today.slice(0, 4)}-01-01`,
@@ -85,16 +72,6 @@ export const formatMonth = (month: string): string =>
     year: "numeric",
   }).format(new Date(`${month}-01T12:00:00Z`));
 
-export const formatDateTime = (value: string): string => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Oslo",
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
-};
-
 export interface MonthGroup {
   month: string;
   dates: ISODate[];
@@ -136,5 +113,12 @@ export const latestAvailableDate = (
 export const latestCount = (inventory: DailyInventory[], to: ISODate): number =>
   inventoryMap(inventory).get(to) ?? 0;
 
-export const isFreshnessStale = (coveredThrough: ISODate): boolean =>
-  coveredThrough < addDays(todayInOslo(), -1);
+export const wasSoldOutAtSomePoint = (
+  inventory: DailyInventory[],
+  from: ISODate,
+  to: ISODate,
+  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">,
+): boolean => {
+  const observations = inventoryMap(inventory);
+  return availableDates(from, to, freshness).some((date) => (observations.get(date) ?? 0) === 0);
+};

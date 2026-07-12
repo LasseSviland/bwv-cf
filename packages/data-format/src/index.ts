@@ -276,9 +276,10 @@ export function currentAndPreviousMonthsInOslo(instant: Date = new Date()): [Mon
 }
 
 export function defaultPeriodInOslo(instant: Date = new Date()): Period {
+  const today = dateInOslo(instant);
   return {
-    from: firstDateOfMonth(previousMonthInOslo(instant)),
-    to: dateInOslo(instant),
+    from: addDays(today, -29),
+    to: today,
   };
 }
 

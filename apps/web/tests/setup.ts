@@ -4,6 +4,8 @@ import { afterEach, vi } from "vitest";
 afterEach(() => {
   cleanup();
   sessionStorage.clear();
+  localStorage.clear();
+  window.history.replaceState(null, "", "/");
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });

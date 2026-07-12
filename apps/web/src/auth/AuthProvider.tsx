@@ -11,6 +11,7 @@ import { api, UNAUTHORIZED_EVENT } from "../api/client";
 import type { StatusResponse } from "../api/types";
 
 const SESSION_KEY = "better-wines:api-key";
+const API_KEY_QUERY_PARAMETERS = ["apiKey", "api_key"] as const;
 
 type AuthState = "checking" | "locked" | "unlocking" | "unlocked";
 
@@ -27,7 +28,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const storedKey = (): string | null => {
   try {
-    return sessionStorage.getItem(SESSION_KEY);
+    return localStorage.getItem(SESSION_KEY);
   } catch {
     return null;
   }
@@ -35,15 +36,37 @@ const storedKey = (): string | null => {
 
 const storeKey = (value: string | null): void => {
   try {
-    if (value === null) sessionStorage.removeItem(SESSION_KEY);
-    else sessionStorage.setItem(SESSION_KEY, value);
+    if (value === null) localStorage.removeItem(SESSION_KEY);
+    else localStorage.setItem(SESSION_KEY, value);
   } catch {
     // Browsers with disabled storage can still use the in-memory session.
   }
 };
 
+const keyFromUrl = (): string | null => {
+  try {
+    const url = new URL(window.location.href);
+    const parameter = API_KEY_QUERY_PARAMETERS.find((name) => url.searchParams.has(name));
+    if (!parameter) return null;
+    const candidate = url.searchParams.get(parameter)?.trim() ?? "";
+    API_KEY_QUERY_PARAMETERS.forEach((name) => url.searchParams.delete(name));
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    if (!candidate) return null;
+    storeKey(candidate);
+    return candidate;
+  } catch {
+    return null;
+  }
+};
+
+const initialKey = (): string | null => keyFromUrl() ?? storedKey();
+
 export const AuthProvider = ({ children }: PropsWithChildren) => {
-  const [apiKey, setApiKey] = useState<string | null>(() => storedKey());
+  const [apiKey, setApiKey] = useState<string | null>(() => initialKey());
   const [state, setState] = useState<AuthState>(() => (storedKey() ? "checking" : "locked"));
   const [status, setStatus] = useState<StatusResponse | null>(null);
 

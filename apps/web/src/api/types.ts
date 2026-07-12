@@ -4,16 +4,19 @@
  */
 export type {
   CatalogResponse,
+  AvailabilitySummary,
   DailyInventory,
   Freshness,
   ISODate,
   MonopolyInventoryEntry,
   MonopolyInventoryResponse,
   MonopolySummary,
+  MonopolyCatalogItem,
   Month,
   Period,
   StatusResponse,
   WineInventoryEntry,
   WineInventoryResponse,
   WineSummary,
+  WineCatalogItem,
 } from "@bwv/contracts";

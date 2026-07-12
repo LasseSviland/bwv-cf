@@ -53,7 +53,9 @@ function accumulate(
 ): void {
   for (const row of rows) {
     if (!validWineIds.has(row.wineId)) {
-      throw new PermanentQueueError(`Orphan inventory wine_id ${row.wineId}`);
+      // The published wine catalog is the ownership boundary. Inventory for
+      // another importer must never enter either public projection.
+      continue;
     }
     if (!validMonopolyIds.has(row.monopolyId)) {
       throw new PermanentQueueError(`Orphan inventory monopoly_id ${row.monopolyId}`);

@@ -93,6 +93,25 @@ export const MonopolySummarySchema = z
   .strict();
 export type MonopolySummary = z.infer<typeof MonopolySummarySchema>;
 
+export const AvailabilitySummarySchema = z
+  .object({
+    soldOutAtSomePoint: z.number().int().safe().nonnegative(),
+    inStockAtSomePoint: z.number().int().safe().nonnegative(),
+    currentlyInStock: z.number().int().safe().nonnegative(),
+  })
+  .strict();
+export type AvailabilitySummary = z.infer<typeof AvailabilitySummarySchema>;
+
+export const WineCatalogItemSchema = WineSummarySchema.extend({
+  availability: AvailabilitySummarySchema,
+}).strict();
+export type WineCatalogItem = z.infer<typeof WineCatalogItemSchema>;
+
+export const MonopolyCatalogItemSchema = MonopolySummarySchema.extend({
+  availability: AvailabilitySummarySchema,
+}).strict();
+export type MonopolyCatalogItem = z.infer<typeof MonopolyCatalogItemSchema>;
+
 export const DailyInventorySchema = z
   .object({
     date: DateStringSchema,
@@ -228,10 +247,10 @@ export function CatalogResponseSchema<T extends z.ZodType>(itemSchema: T) {
 /** Lower-camel alias for callers that prefer factory naming conventions. */
 export const createCatalogResponseSchema = CatalogResponseSchema;
 
-export const WineCatalogResponseSchema = CatalogResponseSchema(WineSummarySchema);
+export const WineCatalogResponseSchema = CatalogResponseSchema(WineCatalogItemSchema);
 export type WineCatalogResponse = z.infer<typeof WineCatalogResponseSchema>;
 
-export const MonopolyCatalogResponseSchema = CatalogResponseSchema(MonopolySummarySchema);
+export const MonopolyCatalogResponseSchema = CatalogResponseSchema(MonopolyCatalogItemSchema);
 export type MonopolyCatalogResponse = z.infer<typeof MonopolyCatalogResponseSchema>;
 
 export const StatusResponseSchema = z
@@ -240,6 +259,12 @@ export const StatusResponseSchema = z
     availableMonths: z
       .array(MonthSchema)
       .refine(hasUniqueValues, { message: "Available months must be unique" }),
+    catalog: z
+      .object({
+        wines: z.number().int().safe().nonnegative(),
+        monopolies: z.number().int().safe().nonnegative(),
+      })
+      .strict(),
   })
   .strict();
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;

@@ -16,6 +16,7 @@ import { sourceBoundsForMonth } from "./source-date";
 // pages without source pressure or query failures. Keep one query at a time, but
 // use a larger bounded page to reduce Queue and connection overhead.
 export const DEFAULT_SOURCE_PAGE_SIZE = 5_000;
+export const BETTER_WINES_GROSSIST = "Better Wines AS";
 
 type SourceConnection = Connection;
 
@@ -124,7 +125,9 @@ export async function readSourceCatalogs(
             varenavn AS name,
             NULLIF(TRIM(land), '') AS country
        FROM wines
+      WHERE grossist = ?
       ORDER BY id`,
+    [BETTER_WINES_GROSSIST],
   );
   const [monopolyRows] = await connection.query<MonopolySourceRow[]>(
     `SELECT m.id,

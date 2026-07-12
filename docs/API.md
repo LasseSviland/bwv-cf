@@ -6,14 +6,18 @@ All endpoints are under `/api/v1` and require `Authorization: Bearer <API_KEY>`.
 
 - `GET /status` — published month coverage and freshness.
 - `GET /health` — binding/process health without contacting MySQL.
-- `GET /wines?query=&cursor=&limit=` — wine catalog search.
+- `GET /wines?query=&cursor=&limit=&from=&to=` — Better Wines catalog search with per-wine counts for monopolies sold out, in stock during the period, and in stock on the latest covered day.
 - `GET /wines/:wineId` — wine metadata.
 - `GET /wines/:wineId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — daily stock for every store that stocked the wine during the period.
-- `GET /monopolies?query=&cursor=&limit=` — Vinmonopolet store search.
+- `GET /monopolies?query=&cursor=&limit=&from=&to=` — Vinmonopolet search with per-store counts for Better Wines products sold out, in stock during the period, and in stock on the latest covered day.
 - `GET /monopolies/:monopolyId` — store metadata.
 - `GET /monopolies/:monopolyId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — one bulk response containing every stocked wine and its daily series.
 
-Missing source observations inside published coverage are returned as `count: 0` and mean sold out. Positive counts mean in stock. Dates after `coveredThrough` and dates in `missingMonths` are not observations; clients must present them as unavailable rather than sold out. Dates use `YYYY-MM-DD` and product boundaries use `Europe/Oslo`. If dates are omitted, the period starts on the first day of the previous month and ends today.
+Missing source observations inside published coverage are returned as `count: 0` and mean sold out. Positive counts mean in stock. Dates after `coveredThrough` and dates in `missingMonths` are not observations; clients must present them as unavailable rather than sold out. Dates use `YYYY-MM-DD` and product boundaries use `Europe/Oslo`. If dates are omitted, the inclusive period is the latest 30 Oslo calendar days.
+
+The published wine catalog is restricted at ingestion to source rows where `grossist = "Better Wines AS"`. Inventory for wines outside that catalog is excluded from both wine and monopoly projections.
+
+The browser can be opened with `?apiKey=<API_KEY>`. This is a frontend bootstrap parameter only: the SPA immediately moves the value into local storage, removes it from the address bar, and continues to send credentials exclusively in the `Authorization` header. API routes never accept query-string credentials.
 
 ## Operations endpoints
 

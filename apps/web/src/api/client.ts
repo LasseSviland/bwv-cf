@@ -11,10 +11,12 @@ import {
 import type {
   CatalogResponse,
   MonopolyInventoryResponse,
+  MonopolyCatalogItem,
   MonopolySummary,
   Period,
   StatusResponse,
   WineInventoryResponse,
+  WineCatalogItem,
   WineSummary,
 } from "./types";
 
@@ -130,14 +132,16 @@ export const api = {
 
   getWines(
     apiKey: string,
-    values: { query?: string; cursor?: string; limit?: number } = {},
+    values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string } = {},
     signal?: AbortSignal,
-  ): Promise<CatalogResponse<WineSummary>> {
+  ): Promise<CatalogResponse<WineCatalogItem>> {
     return request(
       withQuery("/api/v1/wines", {
         query: values.query,
         cursor: values.cursor,
         limit: values.limit ?? 50,
+        from: values.from,
+        to: values.to,
       }),
       apiKey,
       WineCatalogResponseSchema,
@@ -170,14 +174,16 @@ export const api = {
 
   getMonopolies(
     apiKey: string,
-    values: { query?: string; cursor?: string; limit?: number } = {},
+    values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string } = {},
     signal?: AbortSignal,
-  ): Promise<CatalogResponse<MonopolySummary>> {
+  ): Promise<CatalogResponse<MonopolyCatalogItem>> {
     return request(
       withQuery("/api/v1/monopolies", {
         query: values.query,
         cursor: values.cursor,
         limit: values.limit ?? 50,
+        from: values.from,
+        to: values.to,
       }),
       apiKey,
       MonopolyCatalogResponseSchema,

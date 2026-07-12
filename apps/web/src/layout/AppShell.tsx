@@ -1,17 +1,14 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { formatDate } from "../utils/dates";
 
 const navItems = [
-  { to: "/", label: "Overview", end: true },
+  { to: "/", label: "Statistics", end: true },
   { to: "/wines", label: "Wines" },
   { to: "/monopolies", label: "Monopolies" },
-  { to: "/status", label: "Data status" },
 ] as const;
 
 export const AppShell = () => {
-  const { logout, status } = useAuth();
-  const coveredThrough = status?.freshness?.coveredThrough;
+  const { logout } = useAuth();
 
   return (
     <div className="app-shell">
@@ -22,7 +19,6 @@ export const AppShell = () => {
           </span>
           <span>
             <strong>Better Wines</strong>
-            <small>Inventory history</small>
           </span>
         </NavLink>
 
@@ -42,15 +38,6 @@ export const AppShell = () => {
         </nav>
 
         <div className="header-actions">
-          {coveredThrough ? (
-            <span
-              className="coverage-chip"
-              title={`Inventory covered through ${formatDate(coveredThrough)}`}
-            >
-              <span className="coverage-chip__dot" aria-hidden="true" />
-              Through {formatDate(coveredThrough, { day: "numeric", month: "short" })}
-            </span>
-          ) : null}
           <button className="button button--quiet" type="button" onClick={logout}>
             Log out
           </button>
