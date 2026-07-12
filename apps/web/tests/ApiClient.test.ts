@@ -103,4 +103,19 @@ describe("API contract validation", () => {
       expect(error.message).toBe("Wine not found.");
     }
   });
+
+  it("queues a full historical backfill through the authenticated admin API", async () => {
+    const fetchMock = mockFetch({
+      jobId: "job-123",
+      status: "queued",
+      months: ["2024-01", "2024-02"],
+    });
+
+    await expect(api.startHistoricalBackfill("session-key")).resolves.toMatchObject({
+      jobId: "job-123",
+      status: "queued",
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/admin/backfill");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST", body: "{}" });
+  });
 });

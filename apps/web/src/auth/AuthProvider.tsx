@@ -28,7 +28,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const storedKey = (): string | null => {
   try {
-    return localStorage.getItem(SESSION_KEY);
+    const persistent = localStorage.getItem(SESSION_KEY);
+    if (persistent) return persistent;
+    const legacySession = sessionStorage.getItem(SESSION_KEY);
+    if (!legacySession) return null;
+    localStorage.setItem(SESSION_KEY, legacySession);
+    sessionStorage.removeItem(SESSION_KEY);
+    return legacySession;
   } catch {
     return null;
   }

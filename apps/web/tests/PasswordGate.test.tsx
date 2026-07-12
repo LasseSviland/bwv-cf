@@ -105,4 +105,29 @@ describe("PasswordGate", () => {
       "Bearer shared-link-key",
     );
   });
+
+  it("migrates the previous session-scoped key into persistent storage", async () => {
+    sessionStorage.setItem("better-wines:api-key", "legacy-session-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify(status), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+
+    render(
+      <AuthProvider>
+        <PasswordGate>
+          <p>Private inventory</p>
+        </PasswordGate>
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText("Private inventory")).toBeTruthy();
+    expect(localStorage.getItem("better-wines:api-key")).toBe("legacy-session-key");
+    expect(sessionStorage.getItem("better-wines:api-key")).toBeNull();
+  });
 });

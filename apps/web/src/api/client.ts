@@ -1,4 +1,5 @@
 import {
+  AdminAcceptedResponseSchema,
   ApiErrorResponseSchema,
   MonopolyCatalogResponseSchema,
   MonopolyInventoryResponseSchema,
@@ -9,6 +10,7 @@ import {
   WineSummarySchema,
 } from "@bwv/contracts";
 import type {
+  AdminAcceptedResponse,
   CatalogResponse,
   MonopolyInventoryResponse,
   MonopolyCatalogItem,
@@ -39,6 +41,8 @@ export class ApiError extends Error {
 interface RequestOptions {
   signal?: AbortSignal;
   announceUnauthorized?: boolean;
+  method?: "GET" | "POST";
+  body?: unknown;
 }
 
 interface RuntimeSchema<T> {
@@ -77,12 +81,14 @@ const request = async <T>(
   options: RequestOptions = {},
 ): Promise<T> => {
   const response = await fetch(path, {
-    method: "GET",
+    method: options.method ?? "GET",
     signal: options.signal,
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${apiKey}`,
+      ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
     },
+    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
   const body = await responseJson(response);
 
@@ -215,5 +221,13 @@ export const api = {
       MonopolyInventoryResponseSchema,
       { signal },
     );
+  },
+
+  startHistoricalBackfill(apiKey: string, signal?: AbortSignal): Promise<AdminAcceptedResponse> {
+    return request("/api/v1/admin/backfill", apiKey, AdminAcceptedResponseSchema, {
+      signal,
+      method: "POST",
+      body: {},
+    });
   },
 };

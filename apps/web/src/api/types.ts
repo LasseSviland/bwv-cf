@@ -3,6 +3,7 @@
  * imports the corresponding inferred contract types from here.
  */
 export type {
+  AdminAcceptedResponse,
   CatalogResponse,
   AvailabilitySummary,
   DailyInventory,
