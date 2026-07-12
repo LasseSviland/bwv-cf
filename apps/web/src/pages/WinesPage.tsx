@@ -12,7 +12,7 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
     <div className="grid gap-2 py-5 md:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.2fr)_auto] md:items-center">
       <div className="min-w-0">
         <h2 className="mt-2 flex items-center gap-1 text-base font-medium">
-          <Link className="min-w-0 truncate" to={href}>
+          <Link className="min-w-0 truncate" to={href} title={wine.name}>
             {wine.name}
           </Link>
           <details className="relative shrink-0">

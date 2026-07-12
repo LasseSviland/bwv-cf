@@ -21,7 +21,7 @@ export const StockLegend = () => (
       Sold out
     </span>
     <span className="inline-flex items-center gap-1.5">
-      <Badge variant="outline" className="min-w-7 border-dashed" aria-hidden="true">
+      <Badge variant="outline" className="min-w-7 border-dashed bg-muted/70" aria-hidden="true">
         ?
       </Badge>
       Data unavailable

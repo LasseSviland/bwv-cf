@@ -7,15 +7,15 @@ import { CatalogBrowser } from "../components/CatalogBrowser";
 import { Button } from "../components/ui/button";
 
 const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; period: Period }) => {
-  const location = [monopoly.postalCode, monopoly.city].filter(Boolean).join(" ");
   const href = `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`;
   return (
-    <div className="grid gap-2 py-5 md:grid-cols-[minmax(12rem,0.8fr)_minmax(0,1.2fr)_auto] md:items-center">
+    <div className="grid gap-2 py-5 md:grid-cols-[minmax(12rem,0.55fr)_minmax(0,1.45fr)_auto] md:items-center">
       <div className="min-w-0">
         <h2 className="mt-2 truncate text-base font-medium">
-          <Link to={href}>{monopoly.name}</Link>
+          <Link to={href} title={monopoly.name}>
+            {monopoly.name}
+          </Link>
         </h2>
-        {location ? <p className="mt-1 text-sm text-muted-foreground">{location}</p> : null}
       </div>
       <BottleHistory inventory={monopoly.availability.bottlesByDate} label={monopoly.name} />
       <Button asChild variant="ghost" size="icon" className="hidden md:inline-flex">

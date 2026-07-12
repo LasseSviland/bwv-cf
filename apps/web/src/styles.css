@@ -7,9 +7,9 @@
 
 :root {
   color-scheme: light;
-  --background: #f4f0e7;
+  --background: #f6f2e9;
   --foreground: #17251d;
-  --card: #fffdf9;
+  --card: #fffdf8;
   --card-foreground: #17251d;
   --popover: #fffdf9;
   --popover-foreground: #17251d;
@@ -17,14 +17,14 @@
   --primary-foreground: #ffffff;
   --secondary: #e7eee9;
   --secondary-foreground: #173b2b;
-  --muted: #eeeae1;
-  --muted-foreground: #59675f;
+  --muted: #ebe7dd;
+  --muted-foreground: #4c5d53;
   --accent: #e2ece5;
   --accent-foreground: #173b2b;
   --destructive: #9d3941;
-  --border: #d8d4ca;
-  --input: #c8c4ba;
-  --ring: #2f6d4d;
+  --border: #c9c4b8;
+  --input: #aaa99d;
+  --ring: #286b4b;
   --chart-1: #173b2b;
   --chart-2: #2f6d4d;
   --chart-3: #8e364c;

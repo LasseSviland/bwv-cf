@@ -21,7 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 export interface InventoryRow {
   id: string;
   label: string;
-  secondary: string;
+  secondary?: string;
   inventory: DailyInventory[];
   href: string;
 }
@@ -55,7 +55,7 @@ export const InventoryMatrix = ({
   emptyDescription,
   freshness,
 }: InventoryMatrixProps) => {
-  const dates = enumerateDates(from, to);
+  const dates = enumerateDates(from, to).reverse();
   const monthGroups = groupDatesByMonth(dates);
 
   if (rows.length === 0) {
@@ -65,14 +65,9 @@ export const InventoryMatrix = ({
   return (
     <section className="space-y-4" aria-label={`Daily availability by ${entityLabel}`}>
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-primary uppercase">
-            Daily availability
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Scroll horizontally to move through the period.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Scroll horizontally to move through the period.
+        </p>
         <StockLegend />
       </div>
 
@@ -85,7 +80,7 @@ export const InventoryMatrix = ({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                className="sticky left-0 z-30 min-w-64 border-r bg-card px-4"
+                className="sticky left-0 z-30 min-w-64 border-r border-b border-border bg-card px-4"
                 rowSpan={2}
                 scope="col"
               >
@@ -93,7 +88,7 @@ export const InventoryMatrix = ({
               </TableHead>
               {monthGroups.map((group) => (
                 <TableHead
-                  className="h-9 border-r bg-muted/60 text-center text-xs text-muted-foreground"
+                  className="h-9 border-r border-b border-border bg-muted/60 text-center text-xs text-muted-foreground"
                   key={group.month}
                   colSpan={group.dates.length}
                   scope="colgroup"
@@ -107,7 +102,7 @@ export const InventoryMatrix = ({
                 const parts = dayParts(date);
                 return (
                   <TableHead
-                    className="h-12 min-w-11 border-r bg-muted/30 p-1 text-center"
+                    className="h-12 min-w-11 border-r border-b border-border bg-muted/30 p-1 text-center"
                     key={date}
                     scope="col"
                     title={formatDate(date)}
@@ -122,12 +117,13 @@ export const InventoryMatrix = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {rows.map((row, rowIndex) => {
               const observations = inventoryMap(row.inventory);
+              const separatorClass = rowIndex < rows.length - 1 ? " border-b border-border" : "";
               return (
                 <TableRow key={row.id}>
                   <th
-                    className="sticky left-0 z-20 min-w-64 border-r bg-card px-4 py-3 text-left"
+                    className={`sticky left-0 z-20 min-w-64 border-r bg-card px-4 py-3 text-left${separatorClass}`}
                     scope="row"
                   >
                     <Link
@@ -136,9 +132,11 @@ export const InventoryMatrix = ({
                     >
                       {row.label}
                     </Link>
-                    <span className="mt-1 block max-w-56 truncate text-xs font-normal text-muted-foreground">
-                      {row.secondary}
-                    </span>
+                    {row.secondary ? (
+                      <span className="mt-1 block max-w-56 truncate text-xs font-normal text-muted-foreground">
+                        {row.secondary}
+                      </span>
+                    ) : null}
                   </th>
                   {dates.map((date) => {
                     const available = isInventoryDateAvailable(date, freshness);
@@ -152,10 +150,10 @@ export const InventoryMatrix = ({
                         key={date}
                         className={
                           !available
-                            ? "h-14 min-w-11 border-r bg-muted/30 p-1 text-center text-muted-foreground"
+                            ? `h-14 min-w-11 border-r bg-muted/30 p-1 text-center text-muted-foreground${separatorClass}`
                             : inStock
-                              ? "h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900"
-                              : "h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900"
+                              ? `h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900${separatorClass}`
+                              : `h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900${separatorClass}`
                         }
                         title={description}
                         aria-label={description}
@@ -185,7 +183,9 @@ export const InventoryMatrix = ({
                   <h3 className="truncate font-medium">
                     <Link to={row.href}>{row.label}</Link>
                   </h3>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">{row.secondary}</p>
+                  {row.secondary ? (
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{row.secondary}</p>
+                  ) : null}
                 </div>
                 <Badge
                   variant={!latestAvailable ? "outline" : undefined}

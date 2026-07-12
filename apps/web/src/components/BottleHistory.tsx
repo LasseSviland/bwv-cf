@@ -20,7 +20,7 @@ export const BottleHistory = ({ inventory, label }: BottleHistoryProps) => {
   return (
     <div className="min-w-0">
       <div
-        className="flex max-w-full gap-1 overflow-x-auto pb-1"
+        className="flex max-w-full gap-1 overflow-x-auto pb-3"
         aria-label={`Daily bottle count for ${label}`}
       >
         {newestFirst.map(({ date, count }) => (

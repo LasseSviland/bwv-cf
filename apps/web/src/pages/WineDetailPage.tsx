@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
@@ -15,21 +15,17 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "../components/ui/breadcrumb";
-import { Card, CardContent } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
-import {
-  formatDate,
-  latestAvailableDate,
-  latestCount,
-  wasSoldOutAtSomePoint,
-} from "../utils/dates";
+import type { AppShellOutletContext } from "../layout/AppShell";
+import { wasSoldOutAtSomePoint } from "../utils/dates";
 
 export const WineDetailPage = () => {
   const { wineId = "" } = useParams();
+  const { setHeaderContent } = useOutletContext<AppShellOutletContext>();
   const { status } = useAuth();
   const { period, setPeriod } = usePeriodSearch();
   const [filter, setFilter] = useState("");
@@ -41,9 +37,6 @@ export const WineDetailPage = () => {
   const rows = useMemo<InventoryRow[]>(() => {
     if (!request.data) return [];
     const query = filter.trim().toLocaleLowerCase();
-    const sortDate =
-      latestAvailableDate(request.data.period.from, request.data.period.to, request.data) ??
-      request.data.period.to;
     return request.data.monopolies
       .filter(
         ({ inventory }) =>
@@ -62,48 +55,22 @@ export const WineDetailPage = () => {
               .some((value) => String(value).toLocaleLowerCase().includes(query))
           : true,
       )
-      .sort((left, right) => {
-        const stockDifference =
-          latestCount(right.inventory, sortDate) - latestCount(left.inventory, sortDate);
-        return stockDifference || left.monopoly.name.localeCompare(right.monopoly.name);
-      })
+      .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb"))
       .map(({ monopoly, inventory }) => ({
         id: String(monopoly.id),
         label: monopoly.name,
-        secondary: [
-          `Store ${monopoly.storeNumber}`,
-          [monopoly.postalCode, monopoly.city].filter(Boolean).join(" "),
-        ]
-          .filter(Boolean)
-          .join(" · "),
         inventory,
         href: `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`,
       }));
   }, [filter, period.from, period.to, request.data, soldOutOnly]);
 
-  if (request.loading && !request.data) return <LoadingState label="Loading wine availability…" />;
-  if (request.error && !request.data)
-    return <ErrorState error={request.error} onRetry={request.reload} />;
-  if (!request.data) return null;
+  useEffect(() => {
+    if (!request.data) {
+      setHeaderContent(null);
+      return;
+    }
 
-  const { wine } = request.data;
-  const freshness: Freshness = request.data;
-  const latestDate = latestAvailableDate(
-    request.data.period.from,
-    request.data.period.to,
-    freshness,
-  );
-  const storesInStock = latestDate
-    ? request.data.monopolies.filter(({ inventory }) => latestCount(inventory, latestDate) > 0)
-        .length
-    : null;
-  const responsePeriod = request.data.period;
-  const soldOutStores = request.data.monopolies.filter(({ inventory }) =>
-    wasSoldOutAtSomePoint(inventory, responsePeriod.from, responsePeriod.to, freshness),
-  ).length;
-
-  return (
-    <div className="flex w-full min-w-0 flex-col gap-6">
+    setHeaderContent(
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
@@ -113,19 +80,28 @@ export const WineDetailPage = () => {
           </BreadcrumbItem>
           <BreadcrumbSeparator />
           <BreadcrumbItem>
-            <BreadcrumbPage className="max-w-72 truncate">{wine.name}</BreadcrumbPage>
+            <BreadcrumbPage className="max-w-48 truncate sm:max-w-72">
+              {request.data.wine.name}
+            </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
-      </Breadcrumb>
-      <PageHeader
-        eyebrow={`Product ${wine.productNumber}`}
-        title={wine.name}
-        description={
-          wine.country
-            ? `${wine.country} · Daily inventory by monopoly`
-            : "Daily inventory by monopoly"
-        }
-      />
+      </Breadcrumb>,
+    );
+
+    return () => setHeaderContent(null);
+  }, [request.data, setHeaderContent]);
+
+  if (request.loading && !request.data) return <LoadingState label="Loading wine availability…" />;
+  if (request.error && !request.data)
+    return <ErrorState error={request.error} onRetry={request.reload} />;
+  if (!request.data) return null;
+
+  const { wine } = request.data;
+  const freshness: Freshness = request.data;
+
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title={wine.name} />
 
       <PeriodPicker
         period={period}
@@ -133,47 +109,26 @@ export const WineDetailPage = () => {
         availableMonths={status?.availableMonths}
       />
 
-      <Card aria-label="Availability summary">
-        <CardContent className="grid gap-4 py-1 text-sm text-muted-foreground sm:grid-cols-3">
-          <span>
-            <strong className="mr-1 text-lg text-foreground">
-              {request.data.monopolies.length}
-            </strong>{" "}
-            monopolies tracked
-          </span>
-          <span>
-            <strong className="mr-1 text-lg text-foreground">{soldOutStores}</strong> sold out
-            during the period
-          </span>
-          <span>
-            <strong className="mr-1 text-lg text-foreground">{storesInStock ?? "—"}</strong> in
-            stock {latestDate ? `on ${formatDate(latestDate)}` : "now"}
-          </span>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="grid gap-3 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
-          <Label className="grid gap-1.5" htmlFor="store-filter">
-            Filter stores in this view
-            <Input
-              id="store-filter"
-              type="search"
-              placeholder="Store name, number or city"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </Label>
-          <Label className="flex h-9 items-center gap-2 rounded-lg border px-3 font-normal">
+      <div className="space-y-3">
+        <Input
+          id="store-filter"
+          type="search"
+          className="bg-card"
+          placeholder="Search stores by name, number or city"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <Label className="flex items-center gap-2 font-normal">
             <Checkbox
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
             Sold out at some point
           </Label>
-          <span className="pb-2 text-xs text-muted-foreground">{rows.length} shown</span>
-        </CardContent>
-      </Card>
+          <span>{rows.length} stores shown</span>
+        </div>
+      </div>
 
       <InventoryMatrix
         rows={rows}
