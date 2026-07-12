@@ -18,6 +18,9 @@ describe("BottleHistory", () => {
     expect(screen.getByLabelText("Daily bottle count for Langhe Nebbiolo")).toBeTruthy();
     expect(screen.getByTitle("11 Jul 2026: 0 bottles")).toBeTruthy();
     expect(screen.getByTitle("12 Jul 2026: 8 bottles")).toBeTruthy();
-    expect(screen.getByText("8 latest")).toBeTruthy();
+    expect(screen.queryByText("8 latest")).toBeNull();
+
+    const dates = [...screen.getByLabelText("Daily bottle count for Langhe Nebbiolo").children];
+    expect(dates[0]?.getAttribute("title")).toBe("12 Jul 2026: 8 bottles");
   });
 });

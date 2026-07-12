@@ -56,14 +56,19 @@ export const enumerateDates = (from: ISODate, to: ISODate): ISODate[] => {
 export const inventoryMap = (inventory: DailyInventory[]): Map<ISODate, number> =>
   new Map(inventory.map((observation) => [observation.date, observation.count]));
 
-export const formatDate = (date: ISODate, options?: Intl.DateTimeFormatOptions): string =>
-  new Intl.DateTimeFormat("en-GB", {
+type DateFormatOptions = Omit<Intl.DateTimeFormatOptions, "year"> & { year?: "numeric" | false };
+
+export const formatDate = (date: ISODate, options?: DateFormatOptions): string => {
+  const { year: requestedYear, ...dateOptions } = options ?? {};
+  const year = requestedYear === false ? undefined : (requestedYear ?? "numeric");
+  return new Intl.DateTimeFormat("en-GB", {
     timeZone: "UTC",
     day: "numeric",
     month: "short",
-    year: "numeric",
-    ...options,
+    ...dateOptions,
+    ...(year === undefined ? {} : { year }),
   }).format(new Date(`${date}T12:00:00Z`));
+};
 
 export const formatMonth = (month: string): string =>
   new Intl.DateTimeFormat("en-GB", {

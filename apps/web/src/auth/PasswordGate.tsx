@@ -97,7 +97,7 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
               </Alert>
             ) : (
               <p className="text-sm text-muted-foreground" id="password-help">
-                Saved in this browser until you log out.
+                Saved in this browser for future visits.
               </p>
             )}
           </form>
