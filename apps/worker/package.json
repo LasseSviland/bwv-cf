@@ -1,0 +1,22 @@
+{
+  "name": "@bwv/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@bwv/contracts": "workspace:*",
+    "@bwv/data-format": "workspace:*",
+    "hono": "^4.10.6",
+    "mysql2": "^3.22.6",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260712.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}

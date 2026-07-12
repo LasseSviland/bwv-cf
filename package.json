@@ -1,0 +1,41 @@
+{
+  "name": "better-wines-viner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter @bwv/web build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "deploy": "pnpm build && wrangler deploy",
+    "dev": "wrangler dev",
+    "dev:web": "pnpm --filter @bwv/web dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "pnpm -r --if-present run test",
+    "test:watch": "pnpm -r --parallel --if-present run test:watch",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "types": "wrangler types",
+    "types:check": "wrangler types --check",
+    "d1:migrate:local": "wrangler d1 migrations apply better-wines-viner-state --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply better-wines-viner-state --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "latest",
+    "@cloudflare/workers-types": "latest",
+    "@eslint/js": "latest",
+    "@types/node": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "latest",
+    "vitest": "latest",
+    "wrangler": "latest"
+  }
+}

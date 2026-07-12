@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "better-wines-viner",
+  "main": "./apps/worker/src/index.ts",
+  "compatibility_date": "2026-07-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "secrets": {
+    "required": ["API_KEY"],
+  },
+  "placement": {
+    "mode": "smart",
+  },
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./apps/web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "better-wines-viner-state",
+      "database_id": "6e8cfcf9-97d5-4b20-bfa3-fa148db5f1d5",
+      "migrations_dir": "./migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "DATA_BUCKET",
+      "bucket_name": "better-wines-viner-data",
+    },
+  ],
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "3aac2803386c450caa92656fe4a5c994",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SYNC_QUEUE",
+        "queue": "better-wines-viner-sync",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "better-wines-viner-sync",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "better-wines-viner-sync-dlq",
+        "max_concurrency": 1,
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["0 */6 * * *"],
+  },
+  "limits": {
+    "cpu_ms": 300000,
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+}

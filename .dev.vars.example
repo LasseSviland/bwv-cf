@@ -1,0 +1,2 @@
+# Local Worker bearer secret. Production is configured with `wrangler secret put API_KEY`.
+API_KEY=choose-a-local-development-password

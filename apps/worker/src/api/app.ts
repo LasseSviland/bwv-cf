@@ -1,0 +1,223 @@
+import { Hono } from "hono";
+import { z } from "zod";
+
+import { AdminBackfillRequestSchema, AdminSyncRequestSchema, type Month } from "@bwv/contracts";
+import { currentMonthInOslo, QueryPeriodError, validateQueryPeriod } from "@bwv/data-format";
+
+import { HttpError } from "../errors";
+import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
+import {
+  enqueueBackfill,
+  enqueueMonths,
+  enqueueRefresh,
+  FIRST_HISTORIC_MONTH,
+} from "../ingestion/enqueue";
+import { logError } from "../log";
+import { getSyncRun, listMonthSyncs, listSyncRuns } from "../storage/d1";
+import { verifyBearerAuthorization } from "./auth";
+import {
+  parseCatalogLimit,
+  parseEntityId,
+  searchMonopolyCatalog,
+  searchWineCatalog,
+} from "./catalog";
+import { errorResponse, jsonWithEtag } from "./http";
+import { assembleMonopolyInventory, assembleWineInventory } from "./inventory";
+import { getStatus } from "./status";
+
+type AppBindings = { Bindings: Env; Variables: { requestId: string } };
+
+const app = new Hono<AppBindings>();
+
+function requestIdFor(request: Request): string {
+  return request.headers.get("cf-ray") ?? crypto.randomUUID();
+}
+
+function jsonBodyLimit(request: Request): void {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null && Number(contentLength) > 16_384) {
+    throw new HttpError(413, "request_too_large", "Request body is too large");
+  }
+}
+
+async function readJsonBody(request: Request): Promise<unknown> {
+  jsonBodyLimit(request);
+  try {
+    return await request.json<unknown>();
+  } catch {
+    throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
+  }
+}
+
+function periodFromUrl(url: string) {
+  const search = new URL(url).searchParams;
+  try {
+    return validateQueryPeriod({ from: search.get("from"), to: search.get("to") });
+  } catch (error) {
+    if (error instanceof QueryPeriodError) {
+      throw new HttpError(400, error.code, error.message);
+    }
+    throw error;
+  }
+}
+
+function validateSyncMonths(months: readonly Month[]): void {
+  const current = currentMonthInOslo();
+  for (const month of months) {
+    if (month < FIRST_HISTORIC_MONTH || month > current) {
+      throw new HttpError(
+        400,
+        "invalid_month",
+        `Sync months must be between ${FIRST_HISTORIC_MONTH} and ${current}`,
+      );
+    }
+  }
+}
+
+app.use("*", async (context, next) => {
+  const requestId = requestIdFor(context.req.raw);
+  context.set("requestId", requestId);
+  await next();
+  context.res.headers.set("x-request-id", requestId);
+  context.res.headers.set("x-content-type-options", "nosniff");
+  context.res.headers.set("referrer-policy", "same-origin");
+});
+
+app.use("/api/v1/*", async (context, next) => {
+  const valid = await verifyBearerAuthorization(
+    context.req.header("authorization") ?? null,
+    context.env.API_KEY,
+  );
+  if (!valid) {
+    const response = errorResponse(
+      401,
+      "unauthorized",
+      "A valid bearer credential is required",
+      context.get("requestId"),
+    );
+    response.headers.set("www-authenticate", "Bearer");
+    return response;
+  }
+  await next();
+});
+
+app.get("/api/v1/health", async (context) => {
+  await context.env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+  return context.json({ status: "ok", requestId: context.get("requestId") });
+});
+
+app.get("/api/v1/status", async (context) => {
+  const status = await getStatus(context.env);
+  return jsonWithEtag(context.req.raw, status, `status:${JSON.stringify(status)}`);
+});
+
+app.get("/api/v1/wines", async (context) => {
+  const catalog = await getWineCatalog(context.env);
+  const response = searchWineCatalog(
+    catalog,
+    context.req.query("query"),
+    context.req.query("cursor"),
+    parseCatalogLimit(context.req.query("limit")),
+  );
+  return jsonWithEtag(context.req.raw, response, `wines:${JSON.stringify(response)}`);
+});
+
+app.get("/api/v1/wines/:wineId/inventory", async (context) => {
+  const wineId = parseEntityId(context.req.param("wineId"));
+  const result = await assembleWineInventory(context.env, wineId, periodFromUrl(context.req.url));
+  return jsonWithEtag(context.req.raw, result.response, result.etagSeed);
+});
+
+app.get("/api/v1/wines/:wineId", async (context) => {
+  const wineId = parseEntityId(context.req.param("wineId"));
+  const wine = (await getWineCatalog(context.env)).find(({ id }) => id === wineId);
+  if (wine === undefined) throw new HttpError(404, "wine_not_found", "Wine was not found");
+  return jsonWithEtag(context.req.raw, wine, `wine-detail:${JSON.stringify(wine)}`);
+});
+
+app.get("/api/v1/monopolies", async (context) => {
+  const catalog = await getMonopolyCatalog(context.env);
+  const response = searchMonopolyCatalog(
+    catalog,
+    context.req.query("query"),
+    context.req.query("cursor"),
+    parseCatalogLimit(context.req.query("limit")),
+  );
+  return jsonWithEtag(context.req.raw, response, `monopolies:${JSON.stringify(response)}`);
+});
+
+app.get("/api/v1/monopolies/:monopolyId/inventory", async (context) => {
+  const monopolyId = parseEntityId(context.req.param("monopolyId"));
+  const result = await assembleMonopolyInventory(
+    context.env,
+    monopolyId,
+    periodFromUrl(context.req.url),
+  );
+  return jsonWithEtag(context.req.raw, result.response, result.etagSeed);
+});
+
+app.get("/api/v1/monopolies/:monopolyId", async (context) => {
+  const monopolyId = parseEntityId(context.req.param("monopolyId"));
+  const monopoly = (await getMonopolyCatalog(context.env)).find(({ id }) => id === monopolyId);
+  if (monopoly === undefined) {
+    throw new HttpError(404, "monopoly_not_found", "Monopoly was not found");
+  }
+  return jsonWithEtag(context.req.raw, monopoly, `monopoly-detail:${JSON.stringify(monopoly)}`);
+});
+
+app.post("/api/v1/admin/refresh", async (context) => {
+  const response = await enqueueRefresh(context.env);
+  return context.json(response, 202);
+});
+
+app.post("/api/v1/admin/sync", async (context) => {
+  const parsed = AdminSyncRequestSchema.safeParse(await readJsonBody(context.req.raw));
+  if (!parsed.success) throw new HttpError(400, "invalid_request", z.prettifyError(parsed.error));
+  validateSyncMonths(parsed.data.months);
+  return context.json(await enqueueMonths(context.env, "manual", parsed.data.months), 202);
+});
+
+app.post("/api/v1/admin/backfill", async (context) => {
+  const body =
+    context.req.raw.body === null || context.req.header("content-length") === "0"
+      ? {}
+      : await readJsonBody(context.req.raw);
+  const parsed = AdminBackfillRequestSchema.safeParse(body);
+  if (!parsed.success) throw new HttpError(400, "invalid_request", z.prettifyError(parsed.error));
+  const fromMonth = parsed.data.fromMonth ?? FIRST_HISTORIC_MONTH;
+  const throughMonth = parsed.data.throughMonth ?? currentMonthInOslo();
+  validateSyncMonths([fromMonth, throughMonth]);
+  return context.json(await enqueueBackfill(context.env, fromMonth, throughMonth), 202);
+});
+
+app.get("/api/v1/admin/jobs", async (context) => {
+  const limit = parseCatalogLimit(context.req.query("limit"));
+  return context.json({ items: await listSyncRuns(context.env.DB, limit) });
+});
+
+app.get("/api/v1/admin/jobs/:jobId", async (context) => {
+  const jobId = context.req.param("jobId");
+  const run = await getSyncRun(context.env.DB, jobId);
+  if (run === null) throw new HttpError(404, "job_not_found", "Sync job was not found");
+  return context.json({ run, months: await listMonthSyncs(context.env.DB, jobId) });
+});
+
+app.notFound((context) =>
+  errorResponse(404, "not_found", "API route was not found", context.get("requestId")),
+);
+
+app.onError((error, context) => {
+  const requestId = context.get("requestId") || crypto.randomUUID();
+  if (error instanceof HttpError) {
+    return errorResponse(error.status, error.code, error.message, requestId);
+  }
+  logError("Unhandled API error", {
+    requestId,
+    method: context.req.method,
+    path: new URL(context.req.url).pathname,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return errorResponse(500, "internal_error", "Internal server error", requestId);
+});
+
+export default app;
