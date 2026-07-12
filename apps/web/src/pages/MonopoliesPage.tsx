@@ -16,6 +16,9 @@ const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; peri
             {monopoly.name}
           </Link>
         </h2>
+        {monopoly.monopolyCategory ? (
+          <p className="mt-1 text-xs text-muted-foreground">Category {monopoly.monopolyCategory}</p>
+        ) : null}
       </div>
       <BottleHistory inventory={monopoly.availability.bottlesByDate} label={monopoly.name} />
       <Button asChild variant="ghost" size="icon" className="hidden md:inline-flex">
@@ -32,19 +35,25 @@ export const MonopoliesPage = () => (
     kind="monopolies"
     title="Monopolies"
     searchLabel="Search monopolies"
-    searchPlaceholder="Search by store name, number, postcode or city"
+    searchPlaceholder="Search by store name, number, postcode, city or category"
     emptyTitle="No monopolies found"
     emptyDescription="Try another store name, number, postcode or city."
+    itemKey={(monopoly) => monopoly.id}
     searchText={(monopoly) =>
-      [monopoly.name, monopoly.storeNumber, monopoly.postalCode ?? "", monopoly.city ?? ""].join(
-        " ",
-      )
+      [
+        monopoly.name,
+        monopoly.storeNumber,
+        monopoly.postalCode ?? "",
+        monopoly.city ?? "",
+        monopoly.monopolyCategory ?? "",
+      ].join(" ")
     }
     searchFields={(monopoly) => [
       monopoly.name,
       monopoly.storeNumber,
       monopoly.postalCode ?? "",
       monopoly.city ?? "",
+      monopoly.monopolyCategory ?? "",
     ]}
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
     sortItems={(left, right) =>

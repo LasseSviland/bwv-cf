@@ -35,6 +35,7 @@ const wine = {
   productNumber: "001234",
   name: "Fjordglimt Riesling",
   country: "Tyskland",
+  wineCategory: "6",
 };
 
 const monopoly = {
@@ -43,6 +44,7 @@ const monopoly = {
   name: "Oslo, Aker Brygge",
   postalCode: "0250",
   city: "Oslo",
+  monopolyCategory: "5",
 };
 
 const freshness = {
@@ -105,17 +107,22 @@ describe("entity and inventory schemas", () => {
       productNumber: string;
       name: string;
     }>();
+    expectTypeOf<WineSummary["wineCategory"]>().toEqualTypeOf<string | null | undefined>();
   });
 
   it("rejects invalid identifiers, blank fields, and extra fields while accepting source nulls", () => {
     expect(WineSummarySchema.safeParse({ ...wine, id: 0 }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, name: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, country: null }).success).toBe(true);
+    expect(WineSummarySchema.safeParse({ ...wine, wineCategory: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, secret: "no" }).success).toBe(false);
     expect(MonopolySummarySchema.safeParse({ ...monopoly, postalCode: "" }).success).toBe(false);
     expect(
       MonopolySummarySchema.safeParse({ ...monopoly, postalCode: null, city: null }).success,
     ).toBe(true);
+    expect(MonopolySummarySchema.safeParse({ ...monopoly, monopolyCategory: null }).success).toBe(
+      true,
+    );
   });
 
   it("validates non-negative integer daily inventory", () => {

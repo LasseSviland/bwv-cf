@@ -1,5 +1,12 @@
 import { X } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CatalogResponse } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
@@ -18,6 +25,7 @@ interface CatalogBrowserProps<T> {
   searchPlaceholder: string;
   emptyTitle: string;
   emptyDescription: string;
+  itemKey: (item: T) => string | number;
   searchText?: (item: T) => string;
   searchFields?: (item: T) => string[];
   pageSize?: number;
@@ -115,6 +123,7 @@ export const CatalogBrowser = <T,>({
   searchPlaceholder,
   emptyTitle,
   emptyDescription,
+  itemKey,
   searchText = (item) => String(item),
   searchFields = (item) => [searchText(item)],
   pageSize = DISPLAY_PAGE_SIZE,
@@ -130,6 +139,7 @@ export const CatalogBrowser = <T,>({
   const query = useDeferredValue(draft);
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
   const [error, setError] = useState<Error | null>(null);
   const [revision, setRevision] = useState(0);
 
@@ -141,6 +151,7 @@ export const CatalogBrowser = <T,>({
     setLoading(true);
     setError(null);
     setItems([]);
+    setVisibleCount(DISPLAY_PAGE_SIZE);
     void (async () => {
       const allItems: T[] = [];
       let cursor: string | undefined;
@@ -182,13 +193,15 @@ export const CatalogBrowser = <T,>({
     () => rankSearchItems(items, query, searchFields, sortItems),
     [items, query, searchFields, sortItems],
   );
+  const visibleItems = sortedItems.slice(0, visibleCount);
 
   const updateSearch = (value: string) => {
     setDraft(value);
+    setVisibleCount(DISPLAY_PAGE_SIZE);
     const params = new URLSearchParams(searchParams);
     if (value.trim()) params.set("q", value.trim());
     else params.delete("q");
-    setSearchParams(params);
+    startTransition(() => setSearchParams(params, { replace: true }));
   };
 
   return (
@@ -248,17 +261,30 @@ export const CatalogBrowser = <T,>({
       {sortedItems.length > 0 ? (
         <>
           <div className="rounded-xl border bg-card px-5 sm:px-6">
-            {sortedItems.map((item, index) => (
+            {visibleItems.map((item, index) => (
               <div
                 className={
                   index === sortedItems.length - 1 ? "px-0" : "-mx-5 border-b px-5 sm:-mx-6 sm:px-6"
                 }
-                key={index}
+                key={itemKey(item)}
               >
                 {renderItem(item, period)}
               </div>
             ))}
           </div>
+          {visibleCount < sortedItems.length ? (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() =>
+                  startTransition(() => setVisibleCount((current) => current + DISPLAY_PAGE_SIZE))
+                }
+              >
+                Show more
+              </Button>
+            </div>
+          ) : null}
           {error ? <p className="text-sm font-medium text-destructive">{error.message}</p> : null}
         </>
       ) : null}

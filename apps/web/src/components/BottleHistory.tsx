@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { DailyInventory } from "../api/types";
 import { formatDate } from "../utils/dates";
 
@@ -6,7 +7,7 @@ interface BottleHistoryProps {
   label: string;
 }
 
-export const BottleHistory = ({ inventory, label }: BottleHistoryProps) => {
+export const BottleHistory = memo(function BottleHistory({ inventory, label }: BottleHistoryProps) {
   const current = inventory.at(-1);
   const first = inventory[0];
   const showYear =
@@ -46,4 +47,4 @@ export const BottleHistory = ({ inventory, label }: BottleHistoryProps) => {
       </div>
     </div>
   );
-};
+});

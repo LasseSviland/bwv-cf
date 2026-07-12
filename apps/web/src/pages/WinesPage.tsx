@@ -31,6 +31,11 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
                   <strong>Country:</strong> {wine.country}
                 </p>
               ) : null}
+              {wine.wineCategory ? (
+                <p className="mt-1">
+                  <strong>Wine category:</strong> {wine.wineCategory}
+                </p>
+              ) : null}
             </div>
           </details>
         </h2>
@@ -50,11 +55,19 @@ export const WinesPage = () => (
     kind="wines"
     title="Wines"
     searchLabel="Search wines"
-    searchPlaceholder="Search by wine name or product number"
+    searchPlaceholder="Search by wine name, product number or category"
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
-    searchText={(wine) => [wine.name, wine.productNumber, wine.country ?? ""].join(" ")}
-    searchFields={(wine) => [wine.name, wine.productNumber, wine.country ?? ""]}
+    itemKey={(wine) => wine.id}
+    searchText={(wine) =>
+      [wine.name, wine.productNumber, wine.country ?? "", wine.wineCategory ?? ""].join(" ")
+    }
+    searchFields={(wine) => [
+      wine.name,
+      wine.productNumber,
+      wine.country ?? "",
+      wine.wineCategory ?? "",
+    ]}
     pageSize={1_000}
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
     sortItems={(left, right) =>

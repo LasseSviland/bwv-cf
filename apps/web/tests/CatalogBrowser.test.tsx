@@ -70,6 +70,7 @@ describe("CatalogBrowser", () => {
           searchPlaceholder="Search"
           emptyTitle="No items"
           emptyDescription="Nothing found"
+          itemKey={(item) => item}
           load={load}
           sortItems={(left, right) => right - left}
           renderItem={(item) => (
@@ -91,12 +92,13 @@ describe("CatalogBrowser", () => {
   });
 
   it("uses the requested API page size without rendering every item at once", async () => {
+    const items = Array.from({ length: 100 }, (_, index) => index + 1);
     const load = vi.fn((apiKey, values: { cursor?: string }) => {
       void apiKey;
       void values;
-      return Promise.resolve({ items: [1, 2], nextCursor: null });
+      return Promise.resolve({ items, nextCursor: null });
     });
-    render(
+    const { container } = render(
       <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <CatalogBrowser
           kind="items"
@@ -106,14 +108,21 @@ describe("CatalogBrowser", () => {
           searchPlaceholder="Search"
           emptyTitle="No items"
           emptyDescription="Nothing found"
+          itemKey={(item) => item}
           pageSize={1000}
           load={load}
-          renderItem={(item) => <span key={item}>{item}</span>}
+          renderItem={(item) => (
+            <span key={item} data-catalog-item={item}>
+              {item}
+            </span>
+          )}
         />
       </MemoryRouter>,
     );
 
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     expect(load.mock.calls[0]?.[1]).toMatchObject({ limit: 1000, cursor: undefined });
+    expect(container.querySelectorAll("[data-catalog-item]")).toHaveLength(75);
+    expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy();
   });
 });

@@ -31,6 +31,7 @@ export interface WineSourceRow extends RowDataPacket {
   productNumber: string;
   name: string;
   country: string | null;
+  wineCategory: string | null;
 }
 
 export interface MonopolySourceRow extends RowDataPacket {
@@ -39,6 +40,7 @@ export interface MonopolySourceRow extends RowDataPacket {
   name: string;
   postalCode: string | null;
   city: string | null;
+  monopolyCategory: string | null;
 }
 
 export interface RawInventoryChunk {

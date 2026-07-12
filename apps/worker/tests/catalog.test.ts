@@ -11,23 +11,56 @@ import {
 } from "../src/api/catalog";
 
 const wines: WineSummary[] = [
-  { id: 1, productNumber: "100", name: "Bordeaux Rouge", country: "Frankrike" },
-  { id: 2, productNumber: "200", name: "Rioja Reserva", country: "Spania" },
-  { id: 3, productNumber: "300", name: "Mosel Riesling", country: "Tyskland" },
+  {
+    id: 1,
+    productNumber: "100",
+    name: "Bordeaux Rouge",
+    country: "Frankrike",
+    wineCategory: "6",
+  },
+  {
+    id: 2,
+    productNumber: "200",
+    name: "Rioja Reserva",
+    country: "Spania",
+    wineCategory: "5",
+  },
+  {
+    id: 3,
+    productNumber: "300",
+    name: "Mosel Riesling",
+    country: "Tyskland",
+    wineCategory: null,
+  },
 ];
 
 const monopolies: MonopolySummary[] = [
-  { id: 1, storeNumber: "001", name: "Oslo Sentrum", postalCode: "0101", city: "Oslo" },
-  { id: 2, storeNumber: "002", name: "Bergen Storsenter", postalCode: "5015", city: "Bergen" },
+  {
+    id: 1,
+    storeNumber: "001",
+    name: "Oslo Sentrum",
+    postalCode: "0101",
+    city: "Oslo",
+    monopolyCategory: "6",
+  },
+  {
+    id: 2,
+    storeNumber: "002",
+    name: "Bergen Storsenter",
+    postalCode: "5015",
+    city: "Bergen",
+    monopolyCategory: "4",
+  },
 ];
 
 describe("catalog query helpers", () => {
-  it("searches wines by name, product number, or country", () => {
+  it("searches wines by name, product number, country, or wine category", () => {
     expect(searchWineCatalog(wines, "rioja", undefined, 10).items.map(({ id }) => id)).toEqual([2]);
     expect(searchWineCatalog(wines, "300", undefined, 10).items.map(({ id }) => id)).toEqual([3]);
     expect(searchWineCatalog(wines, "frankrike", undefined, 10).items.map(({ id }) => id)).toEqual([
       1,
     ]);
+    expect(searchWineCatalog(wines, "6", undefined, 10).items.map(({ id }) => id)).toEqual([1]);
   });
 
   it("paginates with a cursor bound to the normalized query", () => {
@@ -41,10 +74,11 @@ describe("catalog query helpers", () => {
     expect(() => searchWineCatalog(wines, "rioja", cursor, 2)).toThrow("Cursor");
   });
 
-  it("searches stores by number, location, and postal code", () => {
+  it("searches stores by number, location, postal code, and monopoly category", () => {
     expect(searchMonopolyCatalog(monopolies, "bergen", undefined, 10).items[0]?.id).toBe(2);
     expect(searchMonopolyCatalog(monopolies, "0101", undefined, 10).items[0]?.id).toBe(1);
     expect(searchMonopolyCatalog(monopolies, "002", undefined, 10).items[0]?.id).toBe(2);
+    expect(searchMonopolyCatalog(monopolies, "4", undefined, 10).items[0]?.id).toBe(2);
   });
 
   it("validates entity ids and limits", () => {

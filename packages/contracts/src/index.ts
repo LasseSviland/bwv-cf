@@ -78,6 +78,7 @@ export const WineSummarySchema = z
     productNumber: ExternalNumberSchema,
     name: DisplayNameSchema,
     country: z.string().trim().min(1).max(200).nullable().optional(),
+    wineCategory: z.string().trim().min(1).max(100).nullable().optional(),
   })
   .strict();
 export type WineSummary = z.infer<typeof WineSummarySchema>;
@@ -89,6 +90,7 @@ export const MonopolySummarySchema = z
     name: DisplayNameSchema,
     postalCode: z.string().trim().min(1).max(20).nullable().optional(),
     city: z.string().trim().min(1).max(200).nullable().optional(),
+    monopolyCategory: z.string().trim().min(1).max(100).nullable().optional(),
   })
   .strict();
 export type MonopolySummary = z.infer<typeof MonopolySummarySchema>;

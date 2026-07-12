@@ -18,6 +18,14 @@ import { sourceBoundsForMonth } from "./source-date";
 export const DEFAULT_SOURCE_PAGE_SIZE = 5_000;
 export const BETTER_WINES_GROSSIST = "Better Wines AS";
 
+export function cleanCategory(value: string | null, prefix: string): string | null {
+  const category = value
+    ?.trim()
+    .replace(new RegExp(`^${prefix}\\s*`, "i"), "")
+    .trim();
+  return category || null;
+}
+
 type SourceConnection = Connection;
 
 export async function withSourceConnection<T>(
@@ -123,7 +131,8 @@ export async function readSourceCatalogs(
     `SELECT id,
             varenummer AS productNumber,
             varenavn AS name,
-            NULLIF(TRIM(land), '') AS country
+            NULLIF(TRIM(land), '') AS country,
+            NULLIF(TRIM(butikkategori), '') AS wineCategory
        FROM wines
       WHERE grossist = ?
       ORDER BY id`,
@@ -140,7 +149,8 @@ export async function readSourceCatalogs(
             COALESCE(
               NULLIF(TRIM(m.gate_poststed), ''),
               NULLIF(TRIM(p.name), '')
-            ) AS city
+            ) AS city,
+            NULLIF(TRIM(m.kategori), '') AS monopolyCategory
        FROM monopolies m
        LEFT JOIN post_codes p ON p.id = m.post_code_id
       ORDER BY m.id`,
@@ -151,6 +161,7 @@ export async function readSourceCatalogs(
     productNumber: row.productNumber,
     name: row.name,
     country: row.country,
+    wineCategory: cleanCategory(row.wineCategory, "Butikkategori"),
   }));
   const monopolies = monopolyRows.map((row) => ({
     id: row.id,
@@ -158,6 +169,7 @@ export async function readSourceCatalogs(
     name: row.name,
     postalCode: row.postalCode,
     city: row.city,
+    monopolyCategory: cleanCategory(row.monopolyCategory, "Kategori"),
   }));
   return { wines, monopolies };
 }
