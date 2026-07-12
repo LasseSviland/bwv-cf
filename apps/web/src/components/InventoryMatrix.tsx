@@ -13,6 +13,10 @@ import {
 } from "../utils/dates";
 import { EmptyState } from "./AsyncState";
 import { StockLegend } from "./StockLegend";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 export interface InventoryRow {
   id: string;
@@ -59,52 +63,82 @@ export const InventoryMatrix = ({
   }
 
   return (
-    <section className="inventory-view" aria-label={`Daily availability by ${entityLabel}`}>
-      <div className="inventory-view__toolbar">
+    <section className="space-y-4" aria-label={`Daily availability by ${entityLabel}`}>
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
-          <p className="eyebrow">Daily availability</p>
-          <p className="inventory-view__hint">Scroll horizontally to move through the period.</p>
+          <p className="text-xs font-semibold tracking-[0.14em] text-primary uppercase">
+            Daily availability
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Scroll horizontally to move through the period.
+          </p>
         </div>
         <StockLegend />
       </div>
 
-      <div
-        className="matrix-shell desktop-matrix"
+      <Card
+        className="hidden py-0 md:block"
         tabIndex={0}
         aria-label="Scrollable daily inventory table"
       >
-        <table className="inventory-matrix">
-          <thead>
-            <tr className="matrix-month-row">
-              <th className="matrix-entity-heading" rowSpan={2} scope="col">
+        <Table className="w-max min-w-full border-separate border-spacing-0">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead
+                className="sticky left-0 z-30 min-w-64 border-r bg-card px-4"
+                rowSpan={2}
+                scope="col"
+              >
                 {entityLabel}
-              </th>
+              </TableHead>
               {monthGroups.map((group) => (
-                <th key={group.month} colSpan={group.dates.length} scope="colgroup">
+                <TableHead
+                  className="h-9 border-r bg-muted/60 text-center text-xs text-muted-foreground"
+                  key={group.month}
+                  colSpan={group.dates.length}
+                  scope="colgroup"
+                >
                   {formatMonth(group.month)}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-            <tr className="matrix-day-row">
+            </TableRow>
+            <TableRow className="hover:bg-transparent">
               {dates.map((date) => {
                 const parts = dayParts(date);
                 return (
-                  <th key={date} scope="col" title={formatDate(date)}>
-                    <span>{parts.weekday}</span>
-                    <strong>{parts.day}</strong>
-                  </th>
+                  <TableHead
+                    className="h-12 min-w-11 border-r bg-muted/30 p-1 text-center"
+                    key={date}
+                    scope="col"
+                    title={formatDate(date)}
+                  >
+                    <span className="block text-[0.62rem] text-muted-foreground uppercase">
+                      {parts.weekday}
+                    </span>
+                    <strong className="text-xs">{parts.day}</strong>
+                  </TableHead>
                 );
               })}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {rows.map((row) => {
               const observations = inventoryMap(row.inventory);
               return (
-                <tr key={row.id}>
-                  <th className="matrix-entity" scope="row">
-                    <Link to={row.href}>{row.label}</Link>
-                    <span>{row.secondary}</span>
+                <TableRow key={row.id}>
+                  <th
+                    className="sticky left-0 z-20 min-w-64 border-r bg-card px-4 py-3 text-left"
+                    scope="row"
+                  >
+                    <Link
+                      className="block max-w-56 truncate text-sm font-medium text-primary hover:underline"
+                      to={row.href}
+                    >
+                      {row.label}
+                    </Link>
+                    <span className="mt-1 block max-w-56 truncate text-xs font-normal text-muted-foreground">
+                      {row.secondary}
+                    </span>
                   </th>
                   {dates.map((date) => {
                     const available = isInventoryDateAvailable(date, freshness);
@@ -114,30 +148,30 @@ export const InventoryMatrix = ({
                       ? `${formatDate(date)}: ${inStock ? `${count} bottle${count === 1 ? "" : "s"} in stock` : "sold out"}`
                       : `${formatDate(date)}: data unavailable`;
                     return (
-                      <td
+                      <TableCell
                         key={date}
                         className={
                           !available
-                            ? "stock-cell stock-cell--unknown"
+                            ? "h-14 min-w-11 border-r bg-muted/30 p-1 text-center text-muted-foreground"
                             : inStock
-                              ? "stock-cell stock-cell--in"
-                              : "stock-cell stock-cell--out"
+                              ? "h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900"
+                              : "h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900"
                         }
                         title={description}
                         aria-label={description}
                       >
                         <span aria-hidden="true">{available ? (inStock ? count : "—") : "?"}</span>
-                      </td>
+                      </TableCell>
                     );
                   })}
-                </tr>
+                </TableRow>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
-      <div className="mobile-inventory-list">
+      <div className="grid gap-3 md:hidden">
         {rows.map((row) => {
           const latestDate = latestAvailableDate(from, to, freshness);
           const latestAvailable = latestDate !== null;
@@ -145,21 +179,22 @@ export const InventoryMatrix = ({
           const availableDays = stockDays(row.inventory);
           const observations = inventoryMap(row.inventory);
           return (
-            <article className="mobile-inventory-card" key={row.id}>
-              <div className="mobile-inventory-card__heading">
-                <div>
-                  <h3>
+            <Card key={row.id}>
+              <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate font-medium">
                     <Link to={row.href}>{row.label}</Link>
                   </h3>
-                  <p>{row.secondary}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">{row.secondary}</p>
                 </div>
-                <span
+                <Badge
+                  variant={!latestAvailable ? "outline" : undefined}
                   className={
                     !latestAvailable
-                      ? "status-pill status-pill--neutral"
+                      ? "shrink-0"
                       : count > 0
-                        ? "status-pill status-pill--in"
-                        : "status-pill status-pill--out"
+                        ? "shrink-0 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+                        : "shrink-0 bg-rose-100 text-rose-900 hover:bg-rose-100"
                   }
                 >
                   {!latestAvailable
@@ -167,46 +202,54 @@ export const InventoryMatrix = ({
                     : count > 0
                       ? `${count} in stock`
                       : "Sold out"}
-                </span>
-              </div>
-              <div className="mobile-inventory-card__meta">
-                <span>
-                  <strong>{availableDays}</strong> in-stock day{availableDays === 1 ? "" : "s"}
-                </span>
-                <span>
-                  Latest day ·{" "}
-                  {latestDate
-                    ? formatDate(latestDate, { day: "numeric", month: "short" })
-                    : "unavailable"}
-                </span>
-              </div>
-              <div className="stock-strip" aria-label={`Availability strip for ${row.label}`}>
-                {dates.map((date) => {
-                  const available = isInventoryDateAvailable(date, freshness);
-                  const dailyCount = observations.get(date) ?? 0;
-                  const description = available
-                    ? `${formatDate(date)}: ${dailyCount > 0 ? `${dailyCount} in stock` : "sold out"}`
-                    : `${formatDate(date)}: data unavailable`;
-                  return (
-                    <span
-                      key={date}
-                      className={
-                        !available
-                          ? "stock-strip__day is-unknown"
-                          : dailyCount > 0
-                            ? "stock-strip__day is-in"
-                            : "stock-strip__day is-out"
-                      }
-                      title={description}
-                      aria-label={description}
-                    />
-                  );
-                })}
-              </div>
-              <Link className="text-link" to={row.href}>
-                Open {entityLabel.toLocaleLowerCase()} <span aria-hidden="true">→</span>
-              </Link>
-            </article>
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                  <span>
+                    <strong className="text-foreground">{availableDays}</strong> in-stock day
+                    {availableDays === 1 ? "" : "s"}
+                  </span>
+                  <span>
+                    Latest day ·{" "}
+                    {latestDate
+                      ? formatDate(latestDate, { day: "numeric", month: "short" })
+                      : "unavailable"}
+                  </span>
+                </div>
+                <div
+                  className="flex gap-1 overflow-x-auto pb-1"
+                  aria-label={`Availability strip for ${row.label}`}
+                >
+                  {dates.map((date) => {
+                    const available = isInventoryDateAvailable(date, freshness);
+                    const dailyCount = observations.get(date) ?? 0;
+                    const description = available
+                      ? `${formatDate(date)}: ${dailyCount > 0 ? `${dailyCount} in stock` : "sold out"}`
+                      : `${formatDate(date)}: data unavailable`;
+                    return (
+                      <span
+                        key={date}
+                        className={
+                          !available
+                            ? "h-5 min-w-2 flex-1 rounded-sm border border-dashed bg-muted"
+                            : dailyCount > 0
+                              ? "h-5 min-w-2 flex-1 rounded-sm bg-emerald-400"
+                              : "h-5 min-w-2 flex-1 rounded-sm bg-rose-300"
+                        }
+                        title={description}
+                        aria-label={description}
+                      />
+                    );
+                  })}
+                </div>
+                <Button asChild variant="link" className="h-auto justify-start p-0">
+                  <Link to={row.href}>
+                    Open {entityLabel.toLocaleLowerCase()} <span aria-hidden="true">→</span>
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
           );
         })}
       </div>

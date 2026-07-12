@@ -7,6 +7,18 @@ import { ErrorState, LoadingState } from "../components/AsyncState";
 import { InventoryMatrix, type InventoryRow } from "../components/InventoryMatrix";
 import { PageHeader } from "../components/PageHeader";
 import { PeriodPicker } from "../components/PeriodPicker";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "../components/ui/breadcrumb";
+import { Card, CardContent } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import {
@@ -87,12 +99,20 @@ export const MonopolyDetailPage = () => {
   const location = [monopoly.postalCode, monopoly.city].filter(Boolean).join(" ");
 
   return (
-    <div className="page-stack page-stack--wide">
-      <nav className="breadcrumbs" aria-label="Breadcrumb">
-        <Link to="/monopolies">Monopolies</Link>
-        <span aria-hidden="true">/</span>
-        <span>{monopoly.name}</span>
-      </nav>
+    <div className="flex w-full min-w-0 flex-col gap-6">
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink asChild>
+              <Link to="/monopolies">Monopolies</Link>
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage className="max-w-72 truncate">{monopoly.name}</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
       <PageHeader
         eyebrow={`Store ${monopoly.storeNumber}`}
         title={monopoly.name}
@@ -105,38 +125,45 @@ export const MonopolyDetailPage = () => {
         availableMonths={status?.availableMonths}
       />
 
-      <section className="summary-bar" aria-label="Availability summary">
-        <span>
-          <strong>{request.data.wines.length}</strong> Better Wines products tracked
-        </span>
-        <span>
-          <strong>{soldOutWines}</strong> sold out during the period
-        </span>
-        <span>
-          <strong>{winesInStock ?? "—"}</strong> in stock{" "}
-          {latestDate ? `on ${formatDate(latestDate)}` : "now"}
-        </span>
-      </section>
+      <Card aria-label="Availability summary">
+        <CardContent className="grid gap-4 py-1 text-sm text-muted-foreground sm:grid-cols-3">
+          <span>
+            <strong className="mr-1 text-lg text-foreground">{request.data.wines.length}</strong>{" "}
+            Better Wines products tracked
+          </span>
+          <span>
+            <strong className="mr-1 text-lg text-foreground">{soldOutWines}</strong> sold out during
+            the period
+          </span>
+          <span>
+            <strong className="mr-1 text-lg text-foreground">{winesInStock ?? "—"}</strong> in stock{" "}
+            {latestDate ? `on ${formatDate(latestDate)}` : "now"}
+          </span>
+        </CardContent>
+      </Card>
 
-      <section className="filter-panel">
-        <label htmlFor="wine-filter">Filter wines in this view</label>
-        <input
-          id="wine-filter"
-          type="search"
-          placeholder="Wine name or product number"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        />
-        <label className="toggle-control">
-          <input
-            type="checkbox"
-            checked={soldOutOnly}
-            onChange={(event) => setSoldOutOnly(event.target.checked)}
-          />
-          Sold out at some point
-        </label>
-        <span>{rows.length} shown</span>
-      </section>
+      <Card>
+        <CardContent className="grid gap-3 py-1 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+          <Label className="grid gap-1.5" htmlFor="wine-filter">
+            Filter wines in this view
+            <Input
+              id="wine-filter"
+              type="search"
+              placeholder="Wine name or product number"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            />
+          </Label>
+          <Label className="flex h-9 items-center gap-2 rounded-lg border px-3 font-normal">
+            <Checkbox
+              checked={soldOutOnly}
+              onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
+            />
+            Sold out at some point
+          </Label>
+          <span className="pb-2 text-xs text-muted-foreground">{rows.length} shown</span>
+        </CardContent>
+      </Card>
 
       <InventoryMatrix
         rows={rows}

@@ -1,21 +1,29 @@
+import { Badge } from "./ui/badge";
+
 export const StockLegend = () => (
-  <div className="stock-legend" aria-label="Availability legend">
-    <span className="stock-legend__item">
-      <span className="stock-swatch stock-swatch--in" aria-hidden="true">
+  <div
+    className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+    aria-label="Availability legend"
+  >
+    <span className="inline-flex items-center gap-1.5">
+      <Badge
+        className="min-w-7 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+        aria-hidden="true"
+      >
         4
-      </span>
+      </Badge>
       In stock · number is bottle count
     </span>
-    <span className="stock-legend__item">
-      <span className="stock-swatch stock-swatch--out" aria-hidden="true">
+    <span className="inline-flex items-center gap-1.5">
+      <Badge className="min-w-7 bg-rose-100 text-rose-900 hover:bg-rose-100" aria-hidden="true">
         —
-      </span>
+      </Badge>
       Sold out
     </span>
-    <span className="stock-legend__item">
-      <span className="stock-swatch stock-swatch--unknown" aria-hidden="true">
+    <span className="inline-flex items-center gap-1.5">
+      <Badge variant="outline" className="min-w-7 border-dashed" aria-hidden="true">
         ?
-      </span>
+      </Badge>
       Data unavailable
     </span>
   </div>

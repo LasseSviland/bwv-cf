@@ -6,6 +6,11 @@ import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import { EmptyState, ErrorState, LoadingState } from "./AsyncState";
 import { PageHeader } from "./PageHeader";
 import { PeriodPicker } from "./PeriodPicker";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 interface CatalogBrowserProps<T> {
   kind: string;
@@ -110,36 +115,43 @@ export const CatalogBrowser = <T,>({
   };
 
   return (
-    <div className="page-stack">
+    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-6">
       <PageHeader title={title} description={description} />
       <PeriodPicker
         period={period}
         onChange={setPeriod}
         availableMonths={status?.availableMonths}
       />
-      <form className="catalog-search" role="search" onSubmit={submit}>
-        <label htmlFor={`${kind}-search`}>{searchLabel}</label>
-        <div className="catalog-search__row">
-          <input
-            id={`${kind}-search`}
-            type="search"
-            value={draft}
-            placeholder={searchPlaceholder}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <button className="button button--primary" type="submit">
-            Search
-          </button>
-        </div>
-      </form>
+      <Card>
+        <CardContent className="py-1">
+          <form className="space-y-2" role="search" onSubmit={submit}>
+            <Label htmlFor={`${kind}-search`}>{searchLabel}</Label>
+            <div className="flex gap-2">
+              <Input
+                className="h-10"
+                id={`${kind}-search`}
+                type="search"
+                value={draft}
+                placeholder={searchPlaceholder}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+              <Button className="h-10 px-4" type="submit">
+                <Search />
+                Search
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {query ? (
-        <div className="result-context">
-          <p>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
             Results for <strong>“{query}”</strong>
           </p>
-          <button
-            className="text-button"
+          <Button
+            variant="ghost"
+            size="sm"
             type="button"
             onClick={() => {
               setDraft("");
@@ -148,13 +160,16 @@ export const CatalogBrowser = <T,>({
               setSearchParams(params);
             }}
           >
+            <X />
             Clear search
-          </button>
+          </Button>
         </div>
       ) : null}
 
       {!loading && items.length > 0 ? (
-        <p className="catalog-result-count">{items.length.toLocaleString("en-GB")} results</p>
+        <Badge variant="secondary" className="w-fit">
+          {items.length.toLocaleString("en-GB")} results
+        </Badge>
       ) : null}
 
       {loading ? <LoadingState label={`Ranking ${kind}…`} /> : null}
@@ -166,19 +181,21 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {items.length > 0 ? (
         <>
-          <div className="catalog-list">{visibleItems.map((item) => renderItem(item, period))}</div>
-          <div className="load-more-row">
-            {error ? <p className="form-error">{error.message}</p> : null}
+          <div className="grid gap-3">{visibleItems.map((item) => renderItem(item, period))}</div>
+          <div className="flex min-h-12 items-center justify-center gap-4">
+            {error ? <p className="text-sm font-medium text-destructive">{error.message}</p> : null}
             {visibleCount < sortedItems.length ? (
-              <button
-                className="button button--secondary"
+              <Button
+                variant="outline"
                 type="button"
                 onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
               >
                 Show more
-              </button>
+              </Button>
             ) : (
-              <span className="end-of-results">You’ve reached the end of the results.</span>
+              <span className="text-sm text-muted-foreground">
+                You’ve reached the end of the results.
+              </span>
             )}
           </div>
         </>
@@ -186,3 +203,4 @@ export const CatalogBrowser = <T,>({
     </div>
   );
 };
+import { Search, X } from "lucide-react";

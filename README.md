@@ -34,6 +34,14 @@ pnpm dev
 
 For local ingestion, set `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` outside source control to a TLS-enabled, SELECT-only MySQL connection string. Browser development can run separately with `pnpm dev:web`; Vite proxies `/api` to the local Worker.
 
+To run only the frontend locally against the production API, use:
+
+```bash
+pnpm dev:web:remote-api
+```
+
+This uses the checked-in `remote-api` Vite mode to proxy `/api` to `https://bwv.sviland.net`, so no local Worker or CORS configuration is needed. The frontend still prompts for the API password; do not put it in an environment file.
+
 ## Production resources
 
 - Worker: `better-wines-viner`

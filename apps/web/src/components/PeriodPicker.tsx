@@ -1,3 +1,4 @@
+import { ArrowRight, CalendarDays } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import type { Period } from "../api/types";
 import {
@@ -7,6 +8,10 @@ import {
   todayInOslo,
   yearToDatePeriod,
 } from "../utils/dates";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 interface PeriodPickerProps {
   period: Period;
@@ -41,61 +46,70 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
   };
 
   return (
-    <section className="period-picker" aria-labelledby="period-title">
-      <div className="period-picker__intro">
-        <p className="eyebrow" id="period-title">
-          Period
-        </p>
-        <div className="preset-row" aria-label="Quick date ranges">
-          {presets.map((preset) => (
-            <button
-              key={preset.label}
-              className={samePeriod(period, preset.value) ? "preset is-active" : "preset"}
-              type="button"
-              onClick={() => {
-                setError(null);
-                setDraftOverride(null);
-                onChange(preset.value);
-              }}
-            >
-              {preset.label}
-            </button>
-          ))}
+    <Card aria-labelledby="period-title">
+      <CardContent className="grid gap-5 py-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="space-y-2">
+          <p
+            className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-primary uppercase"
+            id="period-title"
+          >
+            <CalendarDays className="size-4" /> Period
+          </p>
+          <div className="flex flex-wrap gap-1" aria-label="Quick date ranges">
+            {presets.map((preset) => (
+              <Button
+                key={preset.label}
+                variant={samePeriod(period, preset.value) ? "secondary" : "ghost"}
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setDraftOverride(null);
+                  onChange(preset.value);
+                }}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
-      <form className="date-form" onSubmit={submit}>
-        <label>
-          From
-          <input
-            type="date"
-            value={draft.from}
-            max={draft.to || today}
-            min={availableMonths.length > 0 ? `${[...availableMonths].sort()[0]}-01` : undefined}
-            onChange={(event) => setDraftOverride({ ...draft, from: event.target.value })}
+        <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={submit}>
+          <Label className="grid gap-1.5">
+            From
+            <Input
+              className="h-9 w-full sm:w-38"
+              type="date"
+              value={draft.from}
+              max={draft.to || today}
+              min={availableMonths.length > 0 ? `${[...availableMonths].sort()[0]}-01` : undefined}
+              onChange={(event) => setDraftOverride({ ...draft, from: event.target.value })}
+            />
+          </Label>
+          <ArrowRight
+            className="mb-2.5 hidden size-4 text-muted-foreground sm:block"
+            aria-hidden="true"
           />
-        </label>
-        <span className="date-form__arrow" aria-hidden="true">
-          →
-        </span>
-        <label>
-          To
-          <input
-            type="date"
-            value={draft.to}
-            min={draft.from}
-            max={today}
-            onChange={(event) => setDraftOverride({ ...draft, to: event.target.value })}
-          />
-        </label>
-        <button className="button button--secondary" type="submit">
-          Apply
-        </button>
-      </form>
-      {error ? (
-        <p className="form-error period-picker__error" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </section>
+          <Label className="grid gap-1.5">
+            To
+            <Input
+              className="h-9 w-full sm:w-38"
+              type="date"
+              value={draft.to}
+              min={draft.from}
+              max={today}
+              onChange={(event) => setDraftOverride({ ...draft, to: event.target.value })}
+            />
+          </Label>
+          <Button variant="outline" className="h-9" type="submit">
+            Apply
+          </Button>
+        </form>
+        {error ? (
+          <p className="text-sm font-medium text-destructive lg:col-span-2" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 };
