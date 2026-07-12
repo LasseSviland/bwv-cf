@@ -36,6 +36,33 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+export async function getApiResponseCacheVersion(db: D1Database): Promise<number> {
+  const state = await db
+    .prepare("SELECT version FROM api_response_cache_state WHERE singleton = 1")
+    .first<{ version: number }>();
+  if (state === null || !Number.isSafeInteger(state.version) || state.version < 1) {
+    throw new Error("API response cache state is unavailable");
+  }
+  return state.version;
+}
+
+export async function invalidateApiResponseCache(db: D1Database): Promise<number> {
+  const state = await db
+    .prepare(
+      `UPDATE api_response_cache_state
+          SET version = version + 1,
+              updated_at = ?
+        WHERE singleton = 1
+      RETURNING version`,
+    )
+    .bind(nowIso())
+    .first<{ version: number }>();
+  if (state === null || !Number.isSafeInteger(state.version) || state.version < 1) {
+    throw new Error("API response cache state is unavailable");
+  }
+  return state.version;
+}
+
 export async function createSyncRun(
   db: D1Database,
   jobId: string,

@@ -32,6 +32,12 @@
       "bucket_name": "better-wines-viner-data",
     },
   ],
+  "kv_namespaces": [
+    {
+      "binding": "API_RESPONSE_CACHE",
+      "id": "fdcc0d2dfb754558b373ed6f0291c541",
+    },
+  ],
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
