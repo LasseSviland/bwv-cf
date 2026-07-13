@@ -10,6 +10,7 @@ import {
   enqueueBackfill,
   enqueueMonths,
   enqueueRefresh,
+  enqueueReload,
   FIRST_HISTORIC_MONTH,
 } from "../ingestion/enqueue";
 import { logError } from "../log";
@@ -179,6 +180,10 @@ app.get("/api/v1/monopolies/:monopolyId", async (context) => {
 app.post("/api/v1/admin/refresh", async (context) => {
   const response = await enqueueRefresh(context.env);
   return context.json(response, 202);
+});
+
+app.post("/api/v1/admin/reload", async (context) => {
+  return context.json(await enqueueReload(context.env), 202);
 });
 
 app.post("/api/v1/admin/sync", async (context) => {

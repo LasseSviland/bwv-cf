@@ -6,7 +6,7 @@ import {
   coveredThroughForPublish,
   initialExtractionCursor,
   nextExtractionMessage,
-  nextProjectionMessage,
+  nextInventoryContinuation,
   queueDeliveryExhausted,
   queueRetryDelay,
   queueStepKey,
@@ -24,18 +24,27 @@ describe("queue idempotency helpers", () => {
   it("uses a deterministic key for every continuation phase", () => {
     expect(queueStepKey({ ...base, phase: "extract" })).toBe("cursor:start");
     expect(queueStepKey({ ...base, phase: "extract", cursorId: 5000 })).toBe("cursor:5000");
-    expect(queueStepKey({ ...base, phase: "project-wines", bucket: 3 })).toBe("bucket:3");
-    expect(queueStepKey({ ...base, phase: "project-monopolies", bucket: 3 })).toBe("bucket:3");
+    expect(queueStepKey({ ...base, phase: "project-inventory", date: "2026-07-03" })).toBe(
+      "date:2026-07-03",
+    );
     expect(queueStepKey({ ...base, phase: "publish" })).toBe("publish");
     expect(queueStepKey({ ...base, phase: "refresh-catalogs" })).toBe("catalog:generation");
     expect(
       queueStepKey({
         ...base,
         phase: "bootstrap-bounds",
-        fromMonth: "2024-01",
+        fromMonth: "2026-01",
         throughMonth: "2026-07",
       }),
-    ).toBe("2024-01:2026-07");
+    ).toBe("2026-01:2026-07");
+    expect(
+      queueStepKey({
+        ...base,
+        phase: "reset",
+        fromMonth: "2026-01",
+        throughMonth: "2026-07",
+      }),
+    ).toBe("2026-01:2026-07");
   });
 
   it("backs off transient failures with a cap", () => {
@@ -59,18 +68,23 @@ describe("queue idempotency helpers", () => {
       ceilingId: 2_000,
     });
     expect(nextExtractionMessage({ ...base, phase: "extract" }, 2_000, 2_000)).toMatchObject({
-      phase: "project-wines",
-      bucket: 0,
+      phase: "project-inventory",
+      date: "2026-07-01",
     });
   });
 
-  it("derives the same next projection message for retries", () => {
-    expect(nextProjectionMessage({ ...base, phase: "project-wines", bucket: 15 })).toMatchObject({
-      phase: "project-monopolies",
-      bucket: 0,
-    });
+  it("advances one daily object at a time and publishes after the covered date", () => {
     expect(
-      nextProjectionMessage({ ...base, phase: "project-monopolies", bucket: 15 }),
+      nextInventoryContinuation(
+        { ...base, phase: "project-inventory", date: "2026-07-10" },
+        "2026-07-11",
+      ),
+    ).toMatchObject({ phase: "project-inventory", date: "2026-07-11" });
+    expect(
+      nextInventoryContinuation(
+        { ...base, phase: "project-inventory", date: "2026-07-11" },
+        "2026-07-11",
+      ),
     ).toMatchObject({ phase: "publish" });
   });
 

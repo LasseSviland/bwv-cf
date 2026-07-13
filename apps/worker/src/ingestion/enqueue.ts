@@ -5,9 +5,14 @@ import {
   enumerateMonths,
 } from "@bwv/data-format";
 
-import { createSyncRun, markCoordinatorFailed, type NewMonthSync } from "../storage/d1";
+import {
+  createSyncRun,
+  markCoordinatorFailed,
+  resetApplicationData,
+  type NewMonthSync,
+} from "../storage/d1";
 
-const FIRST_HISTORIC_MONTH: Month = "2024-01";
+const FIRST_HISTORIC_MONTH: Month = "2026-01";
 
 function newMonthSyncs(months: readonly Month[]): NewMonthSync[] {
   return months.map((month) => ({ month, generation: crypto.randomUUID() }));
@@ -59,6 +64,9 @@ export async function enqueueBackfill(
   throughMonth: Month = currentMonthInOslo(),
   trigger: SyncTrigger = "backfill",
 ): Promise<AdminAcceptedResponse> {
+  if (fromMonth < FIRST_HISTORIC_MONTH) {
+    throw new RangeError(`Backfill cannot start before ${FIRST_HISTORIC_MONTH}`);
+  }
   const months = enumerateMonths(fromMonth, throughMonth, 100);
   const monthSyncs = newMonthSyncs(months);
   const firstSync = monthSyncs[0];
@@ -89,12 +97,53 @@ export async function enqueueBackfill(
   return { jobId, status: "queued", months };
 }
 
+export async function enqueueReload(env: Env): Promise<AdminAcceptedResponse> {
+  const fromMonth = FIRST_HISTORIC_MONTH;
+  const throughMonth = currentMonthInOslo();
+  const months = enumerateMonths(fromMonth, throughMonth, 100);
+  const monthSyncs = newMonthSyncs(months);
+  const firstSync = monthSyncs[0];
+  if (firstSync === undefined) throw new RangeError("Reload requires at least one month");
+
+  await resetApplicationData(env.DB);
+  const jobId = crypto.randomUUID();
+  const queuedSyncs = await createSyncRun(env.DB, jobId, "backfill", monthSyncs, "reset");
+  const coordinatorSync = queuedSyncs[0];
+  if (coordinatorSync === undefined) throw new Error("Reload coordinator was not created");
+
+  const coordinator: SyncQueueMessage = {
+    version: 1,
+    jobId,
+    trigger: "backfill",
+    month: coordinatorSync.month,
+    generation: coordinatorSync.generation,
+    phase: "reset",
+    fromMonth,
+    throughMonth,
+  };
+  try {
+    await env.SYNC_QUEUE.send(coordinator, { contentType: "json" });
+  } catch (error) {
+    await markCoordinatorFailed(env.DB, jobId, "Failed to enqueue the reload coordinator");
+    throw error;
+  }
+  return { jobId, status: "queued", months };
+}
+
 export async function enqueueRefresh(env: Env): Promise<AdminAcceptedResponse> {
-  return enqueueMonths(env, "manual", currentAndPreviousMonthsInOslo());
+  return enqueueMonths(
+    env,
+    "manual",
+    currentAndPreviousMonthsInOslo().filter((month) => month >= FIRST_HISTORIC_MONTH),
+  );
 }
 
 export async function enqueueScheduled(env: Env, instant: Date): Promise<AdminAcceptedResponse> {
-  return enqueueMonths(env, "scheduled", currentAndPreviousMonthsInOslo(instant));
+  return enqueueMonths(
+    env,
+    "scheduled",
+    currentAndPreviousMonthsInOslo(instant).filter((month) => month >= FIRST_HISTORIC_MONTH),
+  );
 }
 
 export { FIRST_HISTORIC_MONTH };

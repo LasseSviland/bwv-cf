@@ -1,7 +1,8 @@
 import type { SyncQueueMessage } from "@bwv/contracts";
+import type { MonopolySummary, WineSummary } from "@bwv/contracts";
 
 import type {
-  CatalogVersionRow,
+  CatalogStateRow,
   MonthManifest,
   MonthSyncRow,
   PublishedMonthRow,
@@ -212,8 +213,7 @@ export async function listMonthSyncs(db: D1Database, jobId: string): Promise<Mon
               ceiling_id AS ceilingId,
               rows_scanned AS rowsScanned,
               rows_kept AS rowsKept,
-              wine_object_count AS wineObjectCount,
-              monopoly_object_count AS monopolyObjectCount,
+              inventory_object_count AS inventoryObjectCount,
               covered_from AS coveredFrom,
               covered_through AS coveredThrough,
               source_watermark AS sourceWatermark,
@@ -271,21 +271,20 @@ export async function isStepComplete(
   return row !== null;
 }
 
-export async function projectionStepCounts(
+export async function inventoryStepCount(
   db: D1Database,
   message: Pick<SyncQueueMessage, "generation" | "jobId" | "month">,
-): Promise<{ monopolies: number; wines: number }> {
+): Promise<number> {
   const row = await db
     .prepare(
-      `SELECT SUM(CASE WHEN phase = 'project-wines' THEN 1 ELSE 0 END) AS wines,
-              SUM(CASE WHEN phase = 'project-monopolies' THEN 1 ELSE 0 END) AS monopolies
+      `SELECT COUNT(*) AS count
          FROM completed_steps
         WHERE job_id = ? AND month = ? AND generation = ?
-          AND phase IN ('project-wines', 'project-monopolies')`,
+          AND phase = 'project-inventory'`,
     )
     .bind(message.jobId, message.month, message.generation)
-    .first<{ monopolies: number | null; wines: number | null }>();
-  return { wines: row?.wines ?? 0, monopolies: row?.monopolies ?? 0 };
+    .first<{ count: number }>();
+  return row?.count ?? 0;
 }
 
 export async function completeStep(
@@ -459,40 +458,21 @@ export async function completeExtractionStep(
   ]);
 }
 
-export async function incrementProjectionCount(
-  db: D1Database,
-  message: SyncQueueMessage,
-  projection: "wine" | "monopoly",
-  count: number,
-): Promise<void> {
-  const column = projection === "wine" ? "wine_object_count" : "monopoly_object_count";
-  await db
-    .prepare(
-      `UPDATE month_syncs
-          SET ${column} = ${column} + ?, phase = ?, status = 'running', updated_at = ?
-        WHERE job_id = ? AND month = ? AND generation = ?`,
-    )
-    .bind(count, message.phase, nowIso(), message.jobId, message.month, message.generation)
-    .run();
-}
-
-export async function completeProjectionStep(
+export async function completeInventoryStep(
   db: D1Database,
   message: SyncQueueMessage,
   stepKey: string,
-  projection: "wine" | "monopoly",
-  count: number,
 ): Promise<void> {
-  const column = projection === "wine" ? "wine_object_count" : "monopoly_object_count";
   const at = nowIso();
   await db.batch([
     db
       .prepare(
         `UPDATE month_syncs
-            SET ${column} = ${column} + ?, phase = ?, status = 'running', updated_at = ?
+            SET inventory_object_count = inventory_object_count + 1,
+                phase = ?, status = 'running', updated_at = ?
           WHERE job_id = ? AND month = ? AND generation = ?`,
       )
-      .bind(count, message.phase, at, message.jobId, message.month, message.generation),
+      .bind(message.phase, at, message.jobId, message.month, message.generation),
     db
       .prepare(
         `INSERT OR IGNORE INTO completed_steps
@@ -623,8 +603,7 @@ export async function getMonthSync(
               ceiling_id AS ceilingId,
               rows_scanned AS rowsScanned,
               rows_kept AS rowsKept,
-              wine_object_count AS wineObjectCount,
-              monopoly_object_count AS monopolyObjectCount,
+              inventory_object_count AS inventoryObjectCount,
               covered_from AS coveredFrom,
               covered_through AS coveredThrough,
               source_watermark AS sourceWatermark,
@@ -654,8 +633,8 @@ export async function publishMonth(
         `INSERT INTO published_months
           (month, generation, manifest_key, generated_at, covered_from, covered_through,
            source_floor_id, source_watermark, source_row_count, wine_object_count,
-           monopoly_object_count, etag, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           monopoly_object_count, inventory_object_count, etag, published_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
          ON CONFLICT(month) DO UPDATE SET
            generation = excluded.generation,
            manifest_key = excluded.manifest_key,
@@ -665,8 +644,7 @@ export async function publishMonth(
            source_floor_id = excluded.source_floor_id,
            source_watermark = excluded.source_watermark,
            source_row_count = excluded.source_row_count,
-           wine_object_count = excluded.wine_object_count,
-           monopoly_object_count = excluded.monopoly_object_count,
+           inventory_object_count = excluded.inventory_object_count,
            etag = excluded.etag,
            published_at = excluded.published_at`,
       )
@@ -680,8 +658,7 @@ export async function publishMonth(
         manifest.sourceFloorId,
         manifest.sourceWatermark,
         manifest.sourceRowCount,
-        manifest.wineObjectCount,
-        manifest.monopolyObjectCount,
+        manifest.inventoryObjectCount,
         etag,
         publishedAt,
       ),
@@ -777,8 +754,7 @@ export async function listPublishedMonths(db: D1Database): Promise<PublishedMont
               source_floor_id AS sourceFloorId,
               source_watermark AS sourceWatermark,
               source_row_count AS sourceRowCount,
-              wine_object_count AS wineObjectCount,
-              monopoly_object_count AS monopolyObjectCount,
+              inventory_object_count AS inventoryObjectCount,
               etag,
               published_at AS publishedAt
          FROM published_months
@@ -805,8 +781,7 @@ export async function getPublishedMonths(
               source_floor_id AS sourceFloorId,
               source_watermark AS sourceWatermark,
               source_row_count AS sourceRowCount,
-              wine_object_count AS wineObjectCount,
-              monopoly_object_count AS monopolyObjectCount,
+              inventory_object_count AS inventoryObjectCount,
               etag,
               published_at AS publishedAt
          FROM published_months
@@ -818,60 +793,149 @@ export async function getPublishedMonths(
   return result.results;
 }
 
-export interface CatalogVersionInput {
-  catalog: "wines" | "monopolies";
-  generation: string;
-  objectKey: string;
-  itemCount: number;
-  etag: string;
-  generatedAt: string;
+const CATALOG_BATCH_SIZE = 100;
+
+async function runCatalogBatches(db: D1Database, statements: D1PreparedStatement[]): Promise<void> {
+  for (let offset = 0; offset < statements.length; offset += CATALOG_BATCH_SIZE) {
+    await db.batch(statements.slice(offset, offset + CATALOG_BATCH_SIZE));
+  }
 }
 
-export async function putCatalogVersions(
+export async function replaceCatalogs(
   db: D1Database,
-  versions: readonly [CatalogVersionInput, CatalogVersionInput],
+  generation: string,
+  generatedAt: string,
+  wines: readonly WineSummary[],
+  monopolies: readonly MonopolySummary[],
 ): Promise<void> {
-  await db.batch(
-    versions.map((version) =>
+  await db.batch([
+    db.prepare("DELETE FROM wines WHERE generation = ?").bind(generation),
+    db.prepare("DELETE FROM monopolies WHERE generation = ?").bind(generation),
+  ]);
+  await runCatalogBatches(
+    db,
+    wines.map((wine) =>
       db
         .prepare(
-          `INSERT INTO catalog_versions
-            (catalog, generation, object_key, item_count, etag, generated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(catalog) DO UPDATE SET
-             generation = excluded.generation,
-             object_key = excluded.object_key,
-             item_count = excluded.item_count,
-             etag = excluded.etag,
-             generated_at = excluded.generated_at`,
+          `INSERT INTO wines
+            (generation, id, product_number, name, country, wine_category)
+           VALUES (?, ?, ?, ?, ?, ?)`,
         )
         .bind(
-          version.catalog,
-          version.generation,
-          version.objectKey,
-          version.itemCount,
-          version.etag,
-          version.generatedAt,
+          generation,
+          wine.id,
+          wine.productNumber,
+          wine.name,
+          wine.country ?? null,
+          wine.wineCategory ?? null,
         ),
     ),
   );
+  await runCatalogBatches(
+    db,
+    monopolies.map((monopoly) =>
+      db
+        .prepare(
+          `INSERT INTO monopolies
+            (generation, id, store_number, name, postal_code, city, monopoly_category)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          generation,
+          monopoly.id,
+          monopoly.storeNumber,
+          monopoly.name,
+          monopoly.postalCode ?? null,
+          monopoly.city ?? null,
+          monopoly.monopolyCategory ?? null,
+        ),
+    ),
+  );
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO catalog_state
+          (singleton, generation, generated_at, wine_count, monopoly_count)
+         VALUES (1, ?, ?, ?, ?)
+         ON CONFLICT(singleton) DO UPDATE SET
+           generation = excluded.generation,
+           generated_at = excluded.generated_at,
+           wine_count = excluded.wine_count,
+           monopoly_count = excluded.monopoly_count`,
+      )
+      .bind(generation, generatedAt, wines.length, monopolies.length),
+    db.prepare("DELETE FROM wines WHERE generation <> ?").bind(generation),
+    db.prepare("DELETE FROM monopolies WHERE generation <> ?").bind(generation),
+  ]);
 }
 
-export async function getCatalogVersion(
-  db: D1Database,
-  catalog: "wines" | "monopolies",
-): Promise<CatalogVersionRow | null> {
+export async function getCatalogState(db: D1Database): Promise<CatalogStateRow | null> {
   return db
     .prepare(
-      `SELECT catalog,
-              generation,
-              object_key AS objectKey,
-              item_count AS itemCount,
-              etag,
-              generated_at AS generatedAt
-         FROM catalog_versions
-        WHERE catalog = ?`,
+      `SELECT generation,
+              generated_at AS generatedAt,
+              wine_count AS wineCount,
+              monopoly_count AS monopolyCount
+         FROM catalog_state
+        WHERE singleton = 1`,
     )
-    .bind(catalog)
-    .first<CatalogVersionRow>();
+    .first<CatalogStateRow>();
+}
+
+export async function listWines(db: D1Database): Promise<WineSummary[]> {
+  const result = await db
+    .prepare(
+      `SELECT w.id,
+              w.product_number AS productNumber,
+              w.name,
+              w.country,
+              w.wine_category AS wineCategory
+         FROM wines w
+         JOIN catalog_state state ON state.generation = w.generation
+        WHERE state.singleton = 1
+        ORDER BY w.id`,
+    )
+    .all<WineSummary>();
+  return result.results;
+}
+
+export async function listMonopolies(db: D1Database): Promise<MonopolySummary[]> {
+  const result = await db
+    .prepare(
+      `SELECT m.id,
+              m.store_number AS storeNumber,
+              m.name,
+              m.postal_code AS postalCode,
+              m.city,
+              m.monopoly_category AS monopolyCategory
+         FROM monopolies m
+         JOIN catalog_state state ON state.generation = m.generation
+        WHERE state.singleton = 1
+        ORDER BY m.id`,
+    )
+    .all<MonopolySummary>();
+  return result.results;
+}
+
+export async function resetApplicationData(db: D1Database): Promise<void> {
+  const at = nowIso();
+  await db.batch([
+    db.prepare("DELETE FROM completed_steps"),
+    db.prepare("DELETE FROM sync_leases"),
+    db.prepare("DELETE FROM month_syncs"),
+    db.prepare("DELETE FROM sync_runs"),
+    db.prepare("DELETE FROM source_month_bounds"),
+    db.prepare("DELETE FROM published_months"),
+    db.prepare("DELETE FROM catalog_state"),
+    db.prepare("DELETE FROM wines"),
+    db.prepare("DELETE FROM monopolies"),
+    db.prepare("DELETE FROM catalog_versions"),
+    db
+      .prepare(
+        `UPDATE api_response_cache_state
+            SET version = version + 1, updated_at = ?
+          WHERE singleton = 1`,
+      )
+      .bind(at),
+  ]);
 }

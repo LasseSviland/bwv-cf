@@ -1,11 +1,6 @@
 import type { RowDataPacket } from "mysql2";
 
-import type {
-  DailyInventory,
-  MonopolySummary,
-  SyncQueueMessage,
-  WineSummary,
-} from "@bwv/contracts";
+import type { SyncQueueMessage } from "@bwv/contracts";
 
 export interface InventorySourceRow extends RowDataPacket {
   id: number;
@@ -60,28 +55,21 @@ export interface InventorySourceRowData {
   monopolyId: number;
 }
 
-export interface MonthlyWineProjection {
-  schemaVersion: 1;
-  month: string;
+export interface DailyInventorySnapshotRow {
   wineId: number;
-  monopolies: Array<{
-    monopolyId: number;
-    inventory: DailyInventory[];
-  }>;
+  monopolyId: number;
+  count: number;
 }
 
-export interface MonthlyMonopolyProjection {
-  schemaVersion: 1;
-  month: string;
-  monopolyId: number;
-  wines: Array<{
-    wineId: number;
-    inventory: DailyInventory[];
-  }>;
+export interface DailyInventorySnapshot {
+  schemaVersion: 2;
+  date: string;
+  generation: string;
+  inventory: DailyInventorySnapshotRow[];
 }
 
 export interface MonthManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   month: string;
   generation: string;
   generatedAt: string;
@@ -90,8 +78,7 @@ export interface MonthManifest {
   sourceFloorId: number;
   sourceWatermark: number;
   sourceRowCount: number;
-  wineObjectCount: number;
-  monopolyObjectCount: number;
+  inventoryObjectCount: number;
 }
 
 export interface PublishedMonthRow {
@@ -104,8 +91,7 @@ export interface PublishedMonthRow {
   sourceFloorId: number;
   sourceWatermark: number;
   sourceRowCount: number;
-  wineObjectCount: number;
-  monopolyObjectCount: number;
+  inventoryObjectCount: number;
   etag: string;
   publishedAt: string;
 }
@@ -121,8 +107,7 @@ export interface MonthSyncRow {
   ceilingId: number | null;
   rowsScanned: number;
   rowsKept: number;
-  wineObjectCount: number;
-  monopolyObjectCount: number;
+  inventoryObjectCount: number;
   coveredFrom: string | null;
   coveredThrough: string | null;
   sourceWatermark: number | null;
@@ -148,18 +133,11 @@ export interface SyncRunRow {
   error: string | null;
 }
 
-export interface CatalogVersionRow {
-  catalog: "wines" | "monopolies";
+export interface CatalogStateRow {
   generation: string;
-  objectKey: string;
-  itemCount: number;
-  etag: string;
   generatedAt: string;
-}
-
-export interface CatalogData {
-  wines: WineSummary[];
-  monopolies: MonopolySummary[];
+  wineCount: number;
+  monopolyCount: number;
 }
 
 export interface QueueProcessResult {

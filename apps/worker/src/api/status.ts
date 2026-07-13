@@ -2,18 +2,16 @@ import type { Freshness, StatusResponse } from "@bwv/contracts";
 import { currentMonthInOslo, enumerateMonths } from "@bwv/data-format";
 
 import { FIRST_HISTORIC_MONTH } from "../ingestion/enqueue";
-import { listPublishedMonths } from "../storage/d1";
-import { getCatalogVersion } from "../storage/d1";
+import { getCatalogState, listPublishedMonths } from "../storage/d1";
 
 export async function getStatus(env: Env): Promise<StatusResponse> {
-  const [published, wineCatalog, monopolyCatalog] = await Promise.all([
+  const [published, catalogState] = await Promise.all([
     listPublishedMonths(env.DB),
-    getCatalogVersion(env.DB, "wines"),
-    getCatalogVersion(env.DB, "monopolies"),
+    getCatalogState(env.DB),
   ]);
   const catalog = {
-    wines: wineCatalog?.itemCount ?? 0,
-    monopolies: monopolyCatalog?.itemCount ?? 0,
+    wines: catalogState?.wineCount ?? 0,
+    monopolies: catalogState?.monopolyCount ?? 0,
   };
   if (published.length === 0) return { freshness: null, availableMonths: [], catalog };
 

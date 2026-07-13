@@ -17,14 +17,34 @@ export async function putJson(
   });
 }
 
-export async function getRequiredJson<T>(
+export async function putGzipJson(
+  bucket: R2Bucket,
+  key: string,
+  value: object | readonly unknown[],
+  cacheControl = "no-store",
+): Promise<R2Object> {
+  const source = new Blob([JSON.stringify(value)]).stream();
+  const compressed = source.pipeThrough(new CompressionStream("gzip"));
+  const object = await bucket.put(key, compressed, {
+    httpMetadata: {
+      contentType: "application/json; charset=utf-8",
+      contentEncoding: "gzip",
+      cacheControl,
+    },
+  });
+  if (object === null) throw new Error(`R2 rejected object write: ${key}`);
+  return object;
+}
+
+export async function getRequiredGzipJson<T>(
   bucket: R2Bucket,
   key: string,
   parse: (value: unknown) => T,
 ): Promise<T> {
   const object = await bucket.get(key);
   if (object === null) throw new HttpError(503, "dataset_unavailable", "Dataset is unavailable");
-  return parse(await object.json<unknown>());
+  const decompressed = object.body.pipeThrough(new DecompressionStream("gzip"));
+  return parse(await new Response(decompressed).json<unknown>());
 }
 
 export async function getRequiredIngestionJson<T>(

@@ -1,15 +1,15 @@
 import { z } from "zod";
 
+import { DateStringSchema } from "@bwv/contracts";
+
 import { PermanentQueueError } from "../errors";
 import type {
+  DailyInventorySnapshot,
+  DailyInventorySnapshotRow,
   InventorySourceRowData,
-  MonthlyMonopolyProjection,
-  MonthlyWineProjection,
   RawInventoryChunk,
 } from "../types";
 import { sourceDateToIso } from "./source-date";
-
-export const PROJECTION_BUCKET_COUNT = 16;
 
 const RawInventoryChunkSchema = z.object({
   schemaVersion: z.literal(1),
@@ -28,193 +28,93 @@ const RawInventoryChunkSchema = z.object({
   ),
 });
 
+export const DailyInventorySnapshotSchema = z
+  .object({
+    schemaVersion: z.literal(2),
+    date: DateStringSchema,
+    generation: z.string().min(1),
+    inventory: z.array(
+      z
+        .object({
+          wineId: z.number().int().positive(),
+          monopolyId: z.number().int().positive(),
+          count: z.number().int().positive(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
 export function parseRawInventoryChunk(value: unknown): RawInventoryChunk {
   return RawInventoryChunkSchema.parse(value);
-}
-
-export function projectionBucket(entityId: number): number {
-  return entityId % PROJECTION_BUCKET_COUNT;
 }
 
 interface LatestObservation {
   count: number;
   id: number;
+  wineId: number;
+  monopolyId: number;
 }
 
-type ObservationMap = Map<number, Map<number, Map<string, LatestObservation>>>;
+function observationKey(row: Pick<InventorySourceRowData, "wineId" | "monopolyId">): string {
+  return `${row.wineId}:${row.monopolyId}`;
+}
 
-function accumulate(
-  target: ObservationMap,
-  rows: InventorySourceRowData[],
-  primary: "wine" | "monopoly",
-  bucket: number,
+function addRows(
+  observations: Map<string, LatestObservation>,
+  rows: readonly InventorySourceRowData[],
+  date: string,
   validWineIds: ReadonlySet<number>,
   validMonopolyIds: ReadonlySet<number>,
 ): void {
   for (const row of rows) {
-    if (!validWineIds.has(row.wineId)) {
-      // The published wine catalog is the ownership boundary. Inventory for
-      // another importer must never enter either public projection.
-      continue;
-    }
+    if (sourceDateToIso(row.date) !== date) continue;
+    if (!validWineIds.has(row.wineId)) continue;
     if (!validMonopolyIds.has(row.monopolyId)) {
       throw new PermanentQueueError(`Orphan inventory monopoly_id ${row.monopolyId}`);
     }
-    const primaryId = primary === "wine" ? row.wineId : row.monopolyId;
-    if (projectionBucket(primaryId) !== bucket) continue;
-    const relatedId = primary === "wine" ? row.monopolyId : row.wineId;
-    const date = sourceDateToIso(row.date);
-
-    let related = target.get(primaryId);
-    if (related === undefined) {
-      related = new Map();
-      target.set(primaryId, related);
-    }
-    let observations = related.get(relatedId);
-    if (observations === undefined) {
-      observations = new Map();
-      related.set(relatedId, observations);
-    }
-    const existing = observations.get(date);
-    if (existing === undefined || row.id > existing.id) {
-      observations.set(date, { id: row.id, count: row.count });
-    }
+    const key = observationKey(row);
+    const existing = observations.get(key);
+    if (existing === undefined || row.id > existing.id) observations.set(key, row);
   }
 }
 
-export function buildWineProjections(
-  chunks: RawInventoryChunk[],
-  month: string,
-  bucket: number,
+function finishSnapshot(
+  observations: ReadonlyMap<string, LatestObservation>,
+  date: string,
+  generation: string,
+): DailyInventorySnapshot {
+  const inventory: DailyInventorySnapshotRow[] = [...observations.values()]
+    .filter(({ count }) => count > 0)
+    .sort((left, right) => left.wineId - right.wineId || left.monopolyId - right.monopolyId)
+    .map(({ wineId, monopolyId, count }) => ({ wineId, monopolyId, count }));
+  return { schemaVersion: 2, date, generation, inventory };
+}
+
+export function buildDailyInventorySnapshot(
+  chunks: readonly RawInventoryChunk[],
+  date: string,
+  generation: string,
   validWineIds: ReadonlySet<number>,
   validMonopolyIds: ReadonlySet<number>,
-): MonthlyWineProjection[] {
-  const values: ObservationMap = new Map();
+): DailyInventorySnapshot {
+  const observations = new Map<string, LatestObservation>();
   for (const chunk of chunks) {
-    accumulate(values, chunk.rows, "wine", bucket, validWineIds, validMonopolyIds);
+    addRows(observations, chunk.rows, date, validWineIds, validMonopolyIds);
   }
-
-  return [...values.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([wineId, related]) => ({
-      schemaVersion: 1 as const,
-      month,
-      wineId,
-      monopolies: [...related.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([monopolyId, observations]) => ({
-          monopolyId,
-          inventory: [...observations.entries()]
-            .filter(([, observation]) => observation.count > 0)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, observation]) => ({ date, count: observation.count })),
-        }))
-        .filter(({ inventory }) => inventory.length > 0),
-    }))
-    .filter(({ monopolies }) => monopolies.length > 0);
+  return finishSnapshot(observations, date, generation);
 }
 
-export async function buildWineProjectionsFromChunks(
+export async function buildDailyInventorySnapshotFromChunks(
   chunks: AsyncIterable<RawInventoryChunk>,
-  month: string,
-  bucket: number,
+  date: string,
+  generation: string,
   validWineIds: ReadonlySet<number>,
   validMonopolyIds: ReadonlySet<number>,
-): Promise<MonthlyWineProjection[]> {
-  const values: ObservationMap = new Map();
+): Promise<DailyInventorySnapshot> {
+  const observations = new Map<string, LatestObservation>();
   for await (const chunk of chunks) {
-    accumulate(values, chunk.rows, "wine", bucket, validWineIds, validMonopolyIds);
+    addRows(observations, chunk.rows, date, validWineIds, validMonopolyIds);
   }
-  return finishWineProjections(values, month);
-}
-
-export function buildMonopolyProjections(
-  chunks: RawInventoryChunk[],
-  month: string,
-  bucket: number,
-  validWineIds: ReadonlySet<number>,
-  validMonopolyIds: ReadonlySet<number>,
-): MonthlyMonopolyProjection[] {
-  const values: ObservationMap = new Map();
-  for (const chunk of chunks) {
-    accumulate(values, chunk.rows, "monopoly", bucket, validWineIds, validMonopolyIds);
-  }
-
-  return [...values.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([monopolyId, related]) => ({
-      schemaVersion: 1 as const,
-      month,
-      monopolyId,
-      wines: [...related.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([wineId, observations]) => ({
-          wineId,
-          inventory: [...observations.entries()]
-            .filter(([, observation]) => observation.count > 0)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, observation]) => ({ date, count: observation.count })),
-        }))
-        .filter(({ inventory }) => inventory.length > 0),
-    }))
-    .filter(({ wines }) => wines.length > 0);
-}
-
-export async function buildMonopolyProjectionsFromChunks(
-  chunks: AsyncIterable<RawInventoryChunk>,
-  month: string,
-  bucket: number,
-  validWineIds: ReadonlySet<number>,
-  validMonopolyIds: ReadonlySet<number>,
-): Promise<MonthlyMonopolyProjection[]> {
-  const values: ObservationMap = new Map();
-  for await (const chunk of chunks) {
-    accumulate(values, chunk.rows, "monopoly", bucket, validWineIds, validMonopolyIds);
-  }
-  return finishMonopolyProjections(values, month);
-}
-
-function finishWineProjections(values: ObservationMap, month: string): MonthlyWineProjection[] {
-  return [...values.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([wineId, related]) => ({
-      schemaVersion: 1 as const,
-      month,
-      wineId,
-      monopolies: [...related.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([monopolyId, observations]) => ({
-          monopolyId,
-          inventory: [...observations.entries()]
-            .filter(([, observation]) => observation.count > 0)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, observation]) => ({ date, count: observation.count })),
-        }))
-        .filter(({ inventory }) => inventory.length > 0),
-    }))
-    .filter(({ monopolies }) => monopolies.length > 0);
-}
-
-function finishMonopolyProjections(
-  values: ObservationMap,
-  month: string,
-): MonthlyMonopolyProjection[] {
-  return [...values.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([monopolyId, related]) => ({
-      schemaVersion: 1 as const,
-      month,
-      monopolyId,
-      wines: [...related.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([wineId, observations]) => ({
-          wineId,
-          inventory: [...observations.entries()]
-            .filter(([, observation]) => observation.count > 0)
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([date, observation]) => ({ date, count: observation.count })),
-        }))
-        .filter(({ inventory }) => inventory.length > 0),
-    }))
-    .filter(({ wines }) => wines.length > 0);
+  return finishSnapshot(observations, date, generation);
 }

@@ -276,10 +276,10 @@ export const SyncTriggerSchema = z.enum(["scheduled", "manual", "backfill"]);
 export type SyncTrigger = z.infer<typeof SyncTriggerSchema>;
 
 export const SyncPhaseSchema = z.enum([
+  "reset",
   "bootstrap-bounds",
   "extract",
-  "project-wines",
-  "project-monopolies",
+  "project-inventory",
   "publish",
   "refresh-catalogs",
 ]);
@@ -297,13 +297,13 @@ export const SyncQueueMessageSchema = z
     phase: SyncPhaseSchema,
     cursorId: QueuePositionSchema.optional(),
     ceilingId: QueuePositionSchema.optional(),
-    bucket: QueuePositionSchema.optional(),
+    date: DateStringSchema.optional(),
     fromMonth: MonthSchema.optional(),
     throughMonth: MonthSchema.optional(),
   })
   .strict()
   .superRefine((message, context) => {
-    if (message.phase === "bootstrap-bounds") {
+    if (message.phase === "bootstrap-bounds" || message.phase === "reset") {
       if (message.fromMonth === undefined) {
         context.addIssue({
           code: "custom",
@@ -335,8 +335,25 @@ export const SyncQueueMessageSchema = z
     if (message.fromMonth !== undefined || message.throughMonth !== undefined) {
       context.addIssue({
         code: "custom",
-        message: "fromMonth and throughMonth are only valid during bootstrap-bounds",
+        message: "fromMonth and throughMonth are only valid during bootstrap-bounds or reset",
         path: [message.fromMonth !== undefined ? "fromMonth" : "throughMonth"],
+      });
+    }
+    if (message.phase === "project-inventory") {
+      if (message.date === undefined) {
+        context.addIssue({ code: "custom", message: "date is required", path: ["date"] });
+      } else if (message.date.slice(0, 7) !== message.month) {
+        context.addIssue({
+          code: "custom",
+          message: "date must belong to message month",
+          path: ["date"],
+        });
+      }
+    } else if (message.date !== undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "date is only valid during project-inventory",
+        path: ["date"],
       });
     }
   });

@@ -1,51 +1,17 @@
-import { z } from "zod";
-
-import {
-  DailyInventorySchema,
-  type Freshness,
-  type MonopolyInventoryResponse,
-  type Period,
-  type WineInventoryResponse,
+import type {
+  DailyInventory,
+  Freshness,
+  MonopolyInventoryResponse,
+  Period,
+  WineInventoryResponse,
 } from "@bwv/contracts";
 import { mergeAndZeroFillInventorySeries, monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
 import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
 import { getPublishedMonths } from "../storage/d1";
-import { monopolyProjectionKey, wineProjectionKey } from "../storage/keys";
-import type { MonthlyMonopolyProjection, MonthlyWineProjection, PublishedMonthRow } from "../types";
-
-const MonthlyWineProjectionSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    month: z.string(),
-    wineId: z.number().int().positive(),
-    monopolies: z.array(
-      z
-        .object({
-          monopolyId: z.number().int().positive(),
-          inventory: z.array(DailyInventorySchema),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
-
-const MonthlyMonopolyProjectionSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    month: z.string(),
-    monopolyId: z.number().int().positive(),
-    wines: z.array(
-      z
-        .object({
-          wineId: z.number().int().positive(),
-          inventory: z.array(DailyInventorySchema),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+import type { PublishedMonthRow } from "../types";
+import { loadDailyInventory } from "./daily-inventory";
 
 function freshnessFor(
   requestedMonths: readonly string[],
@@ -75,16 +41,6 @@ function freshnessFor(
   };
 }
 
-async function optionalProjection<T>(
-  bucket: R2Bucket,
-  key: string,
-  parse: (value: unknown) => T,
-): Promise<T | null> {
-  const object = await bucket.get(key);
-  if (object === null) return null;
-  return parse(await object.json<unknown>());
-}
-
 export async function assembleWineInventory(
   env: Env,
   wineId: number,
@@ -99,35 +55,28 @@ export async function assembleWineInventory(
   const wine = wines.find(({ id }) => id === wineId);
   if (wine === undefined) throw new HttpError(404, "wine_not_found", "Wine was not found");
   const monopolyById = new Map(monopolies.map((monopoly) => [monopoly.id, monopoly]));
-  const series = new Map<number, Array<MonthlyWineProjection["monopolies"][number]["inventory"]>>();
-
-  for (const month of published) {
-    const projection = await optionalProjection(
-      env.DATA_BUCKET,
-      wineProjectionKey(month.month, month.generation, wineId),
-      (value): MonthlyWineProjection => MonthlyWineProjectionSchema.parse(value),
-    );
-    if (projection === null) continue;
-    for (const entry of projection.monopolies) {
-      const values = series.get(entry.monopolyId) ?? [];
-      values.push(entry.inventory);
-      series.set(entry.monopolyId, values);
+  const series = new Map<number, DailyInventory[]>();
+  for (const snapshot of await loadDailyInventory(env.DATA_BUCKET, period, published)) {
+    for (const row of snapshot.inventory) {
+      if (row.wineId !== wineId) continue;
+      const values = series.get(row.monopolyId) ?? [];
+      values.push({ date: snapshot.date, count: row.count });
+      series.set(row.monopolyId, values);
     }
   }
-
   const response: WineInventoryResponse = {
     ...freshnessFor(requestedMonths, published),
     wine,
     period,
     monopolies: [...series.entries()]
-      .map(([monopolyId, values]) => {
+      .map(([monopolyId, inventory]) => {
         const monopoly = monopolyById.get(monopolyId);
         if (monopoly === undefined) {
           throw new HttpError(503, "dataset_invalid", "Dataset references an unknown monopoly");
         }
         return {
           monopoly,
-          inventory: mergeAndZeroFillInventorySeries(values, period, { maxDays: 366 }),
+          inventory: mergeAndZeroFillInventorySeries([inventory], period, { maxDays: 366 }),
         };
       })
       .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb-NO")),
@@ -154,38 +103,30 @@ export async function assembleMonopolyInventory(
     throw new HttpError(404, "monopoly_not_found", "Monopoly was not found");
   }
   const wineById = new Map(wines.map((wine) => [wine.id, wine]));
-  const series = new Map<number, Array<MonthlyMonopolyProjection["wines"][number]["inventory"]>>();
-
-  for (const month of published) {
-    const projection = await optionalProjection(
-      env.DATA_BUCKET,
-      monopolyProjectionKey(month.month, month.generation, monopolyId),
-      (value): MonthlyMonopolyProjection => MonthlyMonopolyProjectionSchema.parse(value),
-    );
-    if (projection === null) continue;
-    for (const entry of projection.wines) {
-      const values = series.get(entry.wineId) ?? [];
-      values.push(entry.inventory);
-      series.set(entry.wineId, values);
+  const series = new Map<number, DailyInventory[]>();
+  for (const snapshot of await loadDailyInventory(env.DATA_BUCKET, period, published)) {
+    for (const row of snapshot.inventory) {
+      if (row.monopolyId !== monopolyId) continue;
+      const values = series.get(row.wineId) ?? [];
+      values.push({ date: snapshot.date, count: row.count });
+      series.set(row.wineId, values);
     }
   }
-
   const response: MonopolyInventoryResponse = {
     ...freshnessFor(requestedMonths, published),
     monopoly,
     period,
     wines: [...series.entries()]
-      .flatMap(([wineId, values]) => {
+      .flatMap(([wineId, inventory]) => {
         const wine = wineById.get(wineId);
-        // The catalog is the importer ownership boundary. Older monthly
-        // projections can still contain rows that predate that filter.
-        if (wine === undefined) return [];
-        return [
-          {
-            wine,
-            inventory: mergeAndZeroFillInventorySeries(values, period, { maxDays: 366 }),
-          },
-        ];
+        return wine === undefined
+          ? []
+          : [
+              {
+                wine,
+                inventory: mergeAndZeroFillInventorySeries([inventory], period, { maxDays: 366 }),
+              },
+            ];
       })
       .sort((left, right) => left.wine.name.localeCompare(right.wine.name, "nb-NO")),
   };

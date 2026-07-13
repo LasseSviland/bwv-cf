@@ -1,68 +1,22 @@
-import { z } from "zod";
-
-import {
-  DailyInventorySchema,
-  type AvailabilitySummary,
-  type DailyInventory,
-  type MonopolyCatalogItem,
-  type MonopolySummary,
-  type Period,
-  type WineCatalogItem,
-  type WineSummary,
+import type {
+  AvailabilitySummary,
+  DailyInventory,
+  MonopolyCatalogItem,
+  MonopolySummary,
+  Period,
+  WineCatalogItem,
+  WineSummary,
 } from "@bwv/contracts";
-import { enumerateDates, monthsForPeriod } from "@bwv/data-format";
+import { monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
-import { getWineCatalog } from "../ingestion/catalogs";
 import { getPublishedMonths } from "../storage/d1";
-import { monopolyProjectionKey, wineProjectionKey } from "../storage/keys";
-import type { PublishedMonthRow } from "../types";
-
-const MonthlyWineProjectionSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    month: z.string(),
-    wineId: z.number().int().positive(),
-    monopolies: z.array(
-      z
-        .object({
-          monopolyId: z.number().int().positive(),
-          inventory: z.array(DailyInventorySchema),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
-
-const MonthlyMonopolyProjectionSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    month: z.string(),
-    monopolyId: z.number().int().positive(),
-    wines: z.array(
-      z
-        .object({
-          wineId: z.number().int().positive(),
-          inventory: z.array(DailyInventorySchema),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+import type { DailyInventorySnapshot } from "../types";
+import { coveredDates, loadDailyInventory } from "./daily-inventory";
 
 export interface RelatedInventory {
   relatedId: number;
   inventory: DailyInventory[];
-}
-
-const SUMMARY_BATCH_SIZE = 25;
-
-function coveredDates(period: Period, published: readonly PublishedMonthRow[]): string[] {
-  const byMonth = new Map(published.map((row) => [row.month, row]));
-  return enumerateDates(period.from, period.to, 366).filter((date) => {
-    const row = byMonth.get(date.slice(0, 7));
-    return row !== undefined && date >= row.coveredFrom && date <= row.coveredThrough;
-  });
 }
 
 export function summarizeAvailability(
@@ -104,47 +58,42 @@ export function summarizeAvailability(
   };
 }
 
-async function inBatches<T, R>(
-  values: readonly T[],
-  operation: (value: T) => Promise<R>,
-  batchSize = SUMMARY_BATCH_SIZE,
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let offset = 0; offset < values.length; offset += batchSize) {
-    results.push(...(await Promise.all(values.slice(offset, offset + batchSize).map(operation))));
+function indexSnapshots(
+  snapshots: readonly DailyInventorySnapshot[],
+  primary: "wine" | "monopoly",
+): Map<number, Map<number, DailyInventory[]>> {
+  const indexed = new Map<number, Map<number, DailyInventory[]>>();
+  for (const snapshot of snapshots) {
+    for (const row of snapshot.inventory) {
+      const primaryId = primary === "wine" ? row.wineId : row.monopolyId;
+      const relatedId = primary === "wine" ? row.monopolyId : row.wineId;
+      const related = indexed.get(primaryId) ?? new Map<number, DailyInventory[]>();
+      const inventory = related.get(relatedId) ?? [];
+      inventory.push({ date: snapshot.date, count: row.count });
+      related.set(relatedId, inventory);
+      indexed.set(primaryId, related);
+    }
   }
-  return results;
+  return indexed;
+}
+
+function entriesFor(
+  index: ReadonlyMap<number, ReadonlyMap<number, DailyInventory[]>>,
+  primaryId: number,
+): RelatedInventory[] {
+  return [...(index.get(primaryId)?.entries() ?? [])].map(([relatedId, inventory]) => ({
+    relatedId,
+    inventory,
+  }));
 }
 
 async function summaryContext(env: Env, period: Period) {
-  const requestedMonths = monthsForPeriod(period);
-  const published = await getPublishedMonths(env.DB, requestedMonths);
+  const published = await getPublishedMonths(env.DB, monthsForPeriod(period));
   if (published.length === 0) {
     throw new HttpError(503, "dataset_unavailable", "No requested dataset month is available");
   }
-  return { published, knownDates: coveredDates(period, published) };
-}
-
-export async function readWineProjectionEntries(
-  bucket: R2Bucket,
-  published: readonly Pick<PublishedMonthRow, "month" | "generation">[],
-  wineId: number,
-  period: Period,
-): Promise<RelatedInventory[]> {
-  const projections = await Promise.all(
-    published.map(async (month) => {
-      const object = await bucket.get(wineProjectionKey(month.month, month.generation, wineId));
-      if (object === null) return [];
-      const projection = MonthlyWineProjectionSchema.parse(await object.json<unknown>());
-      return projection.monopolies.map((monopoly) => ({
-        relatedId: monopoly.monopolyId,
-        inventory: monopoly.inventory.filter(
-          ({ date }) => date >= period.from && date <= period.to,
-        ),
-      }));
-    }),
-  );
-  return projections.flat();
+  const snapshots = await loadDailyInventory(env.DATA_BUCKET, period, published);
+  return { knownDates: coveredDates(period, published), snapshots };
 }
 
 export async function summarizeWines(
@@ -152,11 +101,12 @@ export async function summarizeWines(
   wines: readonly WineSummary[],
   period: Period,
 ): Promise<WineCatalogItem[]> {
-  const { published, knownDates } = await summaryContext(env, period);
-  return inBatches(wines, async (wine) => {
-    const entries = await readWineProjectionEntries(env.DATA_BUCKET, published, wine.id, period);
-    return { ...wine, availability: summarizeAvailability(entries, knownDates) };
-  });
+  const { knownDates, snapshots } = await summaryContext(env, period);
+  const index = indexSnapshots(snapshots, "wine");
+  return wines.map((wine) => ({
+    ...wine,
+    availability: summarizeAvailability(entriesFor(index, wine.id), knownDates),
+  }));
 }
 
 export async function summarizeMonopolies(
@@ -164,29 +114,10 @@ export async function summarizeMonopolies(
   monopolies: readonly MonopolySummary[],
   period: Period,
 ): Promise<MonopolyCatalogItem[]> {
-  const [{ published, knownDates }, wines] = await Promise.all([
-    summaryContext(env, period),
-    getWineCatalog(env),
-  ]);
-  const validWineIds = new Set(wines.map(({ id }) => id));
-  return inBatches(monopolies, async (monopoly) => {
-    const entries: RelatedInventory[] = [];
-    for (const month of published) {
-      const object = await env.DATA_BUCKET.get(
-        monopolyProjectionKey(month.month, month.generation, monopoly.id),
-      );
-      if (object === null) continue;
-      const projection = MonthlyMonopolyProjectionSchema.parse(await object.json<unknown>());
-      for (const wine of projection.wines) {
-        entries.push({
-          relatedId: wine.wineId,
-          inventory: wine.inventory.filter(({ date }) => date >= period.from && date <= period.to),
-        });
-      }
-    }
-    return {
-      ...monopoly,
-      availability: summarizeAvailability(entries, knownDates, validWineIds),
-    };
-  });
+  const { knownDates, snapshots } = await summaryContext(env, period);
+  const index = indexSnapshots(snapshots, "monopoly");
+  return monopolies.map((monopoly) => ({
+    ...monopoly,
+    availability: summarizeAvailability(entriesFor(index, monopoly.id), knownDates),
+  }));
 }

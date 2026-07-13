@@ -6,7 +6,7 @@ Build one TypeScript repository containing:
 
 - A Cloudflare Worker that serves an internet-accessible, password-protected read API and the production React SPA.
 - A scheduled, queue-driven ingestion pipeline that reads the existing MySQL database using a strictly read-only account.
-- Monthly inventory datasets stored in Cloudflare R2 so user-facing API requests never depend on MySQL.
+- Daily gzip inventory snapshots stored in Cloudflare R2 so user-facing API requests never depend on MySQL.
 - A simple React frontend for finding a wine or Vinmonopolet store and viewing its inventory history.
 - GitHub Actions deployment when changes are pushed to `main`.
 
@@ -47,11 +47,11 @@ Each inventory date represents the morning inventory snapshot for Norwegian Vinm
 
 Confirmed:
 
-- Use one logical R2 directory/prefix per calendar month, containing per-wine and per-store objects.
+- Store wines and monopolies in D1. Store one gzip JSON inventory object per covered calendar date in R2.
 - Store and wine APIs return raw inventory observations. They do not calculate distinct-wine totals, total bottle counts, averages, or other summaries; the frontend may derive those values.
 - A store endpoint supports one bulk response containing all wines and their inventory series, avoiding hundreds of follow-up requests.
 - Archived months remain queryable. Only the current and immediately previous month are rebuilt by the six-hour refresh.
-- The initial production backfill covers every calendar month from `2024-01` through the current Oslo month. It is started through the authenticated API and emits one explicit month-bearing Queue message per month.
+- Production reload covers every calendar month from `2026-01` through the current Oslo month. It clears existing D1 application data and R2 objects before reloading from MySQL.
 - Inventory is mostly append-only but rows can be updated or deleted, so a high-watermark-only incremental design is insufficient for correctness.
 - The legacy database cannot be changed and no new index can be added.
 - Every API endpoint requires an API access password. The frontend prompts for it and treats it as a password; it is never compiled into the static application.
@@ -72,8 +72,8 @@ Browser
                                         ▼
                               Cloudflare Worker
                                 ├─ Workers Static Assets
-                                ├─ R2 monthly inventory data
-                                └─ D1 ingestion state/manifests (recommended)
+                                ├─ R2 daily gzip inventory data
+                                └─ D1 catalogs + ingestion state
 
 Cron Trigger (every 6 hours) ──► Queue producer
 Manual refresh endpoint ───────► Queue producer
@@ -89,7 +89,7 @@ Use Cloudflare Workers Static Assets for the built React application rather than
 
 Use Hyperdrive for the external MySQL connection, `mysql2`'s Promise API, TLS, and `nodejs_compat`. Create a dedicated MySQL user restricted to `SELECT` on the four approved tables.
 
-Use D1 only for small, transactional operational state: job locks, checkpoints, published dataset versions, object manifests, and audit history. Inventory facts remain in R2.
+Use D1 for wines, monopolies, catalog-generation state, job locks, checkpoints, published month versions, and audit history. Inventory facts remain in R2.
 
 ## 5. Repository structure
 
@@ -120,34 +120,26 @@ Use a pnpm workspace, TypeScript in strict mode, React with Vite, Vitest, ESLint
 
 ## 6. R2 data model
 
-### One logical monthly partition with entity shards
+### One logical monthly generation with one file per date
 
 ```text
-datasets/v1/month=2026-07/manifest.json
-datasets/v1/month=2026-07/wines/{wineId}.json.br
-datasets/v1/month=2026-07/monopolies/{monopolyId}.json.br
-catalog/v1/wines.json.br
-catalog/v1/monopolies.json.br
+datasets/v1/month=2026-07/generation={generation}/inventory/2026-07-01.json.gz
+datasets/v1/month=2026-07/generation={generation}/inventory/2026-07-02.json.gz
+staging/v1/month=2026-07/generation={generation}/raw/{cursor-range}.json
 ```
 
-Each monthly manifest contains the schema version, month, source ID ceiling, generated timestamp, covered dates, row count, checksums, and published generation ID. Per-wine and per-store objects contain only sparse non-zero facts. Brotli or gzip compression is used with the correct content metadata.
-
-- Each wine object groups raw daily stock counts by monopoly for that wine.
-- Each monopoly object groups raw daily stock counts by wine for that store.
-- This deliberate duplication enables both primary API views and makes a store-wide bulk response one bounded set of monthly R2 reads.
-- Objects contain facts, dates, and entity references—not precomputed totals.
+Each published object contains the schema version, date, generation, and every sparse positive `(wineId, monopolyId, count)` fact for that date. It is encoded as gzip JSON with `Content-Encoding: gzip`. Catalog metadata is not duplicated into R2; D1 is the only catalog store.
 
 Each calendar month is an independently addressable logical R2 dataset. Every six-hour run republishes both the current month and the immediately previous month. When a month is no longer one of those two, its last successfully reconciled generation becomes immutable and remains available as archived history unless a retention policy is agreed later.
 
-This duplicates each sparse observation into two read-optimized projections, but makes API reads small, bounded, and cheap. R2 storage is less expensive than repeatedly reading and parsing a whole monthly dataset.
+Catalog and detail requests load each requested date at most once and reuse that snapshot for all wine and monopoly calculations. This removes the prior per-entity/per-month R2 fan-out and avoids duplicating observations into two projections.
 
 Publishing must be atomic from the API's perspective:
 
-1. Write all objects under a unique staging generation prefix.
-2. Validate counts, date bounds, referential integrity, and sample objects.
-3. Write the generation manifest last.
-4. Update the small D1 `published_months` pointer transactionally.
-5. Retain the previous generation temporarily for rollback, then remove stale staging data with a lifecycle policy.
+1. Write every daily gzip object under a unique generation prefix.
+2. Validate counts, date bounds, referential integrity, and object count.
+3. Update the D1 `published_months` pointer only after all dates exist.
+4. Retain the previous generation during routine refreshes and remove all R2 data during the next deployment reload.
 
 ## 7. Ingestion pipeline
 
@@ -196,11 +188,11 @@ LIMIT ?;
 
 - Filter the scanned rows to the current and previous months in the consumer. Rebuilding from the saved floor makes updates and deletions inside the scanned recent-ID window visible in the next generation.
 - Start conservatively at 500–1,000 rows per page, with one open connection and no query parallelism. The controlled production burn-in completed hundreds of sequential 1,000-row pages without source or query errors, after which the bounded page was raised to 5,000 to reduce Queue and connection overhead. Database reads remain strictly single-concurrency.
-- The first deployment performs one controlled bounds-discovery pass for `2024-01` through the current month, then queues and publishes every month independently. It may take longer than normal refreshes and remains sequential. Each resulting sync and continuation message retains its explicit `YYYY-MM` month.
+- A deployment reload performs one controlled bounds-discovery pass for `2026-01` through the current month, then queues and publishes every month independently. It may take longer than normal refreshes and remains sequential. Each resulting sync and continuation message retains its explicit `YYYY-MM` month.
 - Read the small `wines`, `monopolies`, and optional `post_codes` catalogs once per run.
 - Join `post_codes` only when it supplies location data not already available on `monopolies`. Do not read `counties` unless a later UI requirement needs county/fylke information.
 - Reject or quarantine orphaned foreign keys rather than silently inventing metadata.
-- Treat negative inventory counts as invalid. Preserve zero rows if present, but omit them from sparse R2 projections.
+- Treat negative inventory counts as invalid. Preserve the latest row for conflict resolution, then omit zero counts from the sparse daily R2 snapshot.
 - Use `Europe/Oslo` for product date boundaries and UTC ISO timestamps for system metadata.
 
 ### Correctness without source changes
@@ -220,7 +212,7 @@ All endpoints are versioned under `/api/v1`. Dates use `YYYY-MM-DD`. Entity IDs 
 - `GET /api/v1/monopolies?query=&cursor=&limit=`
 - `GET /api/v1/monopolies/:monopolyId`
 
-Search/catalog data comes from the compact R2 catalogs and supports the frontend without touching MySQL.
+Search/catalog data comes from D1 and supports the frontend without touching MySQL.
 
 ### Inventory history
 
@@ -234,7 +226,7 @@ Search/catalog data comes from the compact R2 catalogs and supports the frontend
 
 Default `from` is the first day of the previous month and default `to` is today in Oslo. Validate `from <= to`, reject future dates, set a documented maximum range, and return `400` for invalid parameters.
 
-For every request, derive the calendar months intersecting `[from, to]` and read only those R2 month partitions. Never list or download unrelated monthly objects. Merge the relevant sparse projections, clip them to the exact requested dates, and then fill missing dates with zero.
+For every request, derive the covered dates intersecting `[from, to]` and read exactly one R2 gzip object per covered date. Load that set once, reuse it across all requested entities, and then fill missing entity observations with zero.
 
 Zero filling is scoped to the requested entity and dates. Do not materialize the global cross-product of all wines, all stores, and all dates.
 
@@ -295,7 +287,7 @@ Use the shared contract package for runtime response validation and TypeScript t
 - Unit tests for password authorization, primary-key floor/ceiling windows, update/delete reconciliation, and bulk monopoly responses.
 - Contract tests for every API response and error shape.
 - Ingestion tests against a seeded local MySQL fixture with missing rows, duplicates, orphans, month boundaries, retries, and resumed cursors.
-- R2 publication tests proving readers see either the old complete generation or the new complete generation, never partial data.
+- R2 publication tests proving each published date is one valid gzip JSON object and readers see only a complete D1-published generation.
 - Queue tests proving duplicate messages do not duplicate or corrupt output.
 - React tests for search, routing, period selection, empty state, and stale-data warnings.
 - End-to-end tests against a preview deployment.
@@ -308,7 +300,7 @@ Use the shared contract package for runtime response validation and TypeScript t
 - Current and previous months refresh successfully every six hours.
 - A normal two-month refresh completes in seconds to a few minutes after the initial floor-discovery backfill; the measured target is documented after production benchmarking.
 - Missing observations are returned as zero for every date in a requested entity series.
-- API requests read only the R2 month partitions intersecting the requested period.
+- API requests read one R2 object per covered date and never fan out by catalog item.
 - API results match sampled source SQL for both a wine and a store, including updated and deleted recent rows.
 - One authenticated bulk monopoly request can return all wines and raw series needed by the store page without per-wine follow-up requests.
 - Every API route rejects missing or invalid access passwords.
@@ -332,6 +324,7 @@ Workflow on `main`:
 3. Build the React SPA.
 4. Deploy the Worker, bindings, Cron Trigger, Queue configuration, and static assets with Wrangler.
 5. Run smoke tests against `/api/v1/health`, `/api/v1/status`, and the SPA.
+6. Call `/api/v1/admin/reload` to clear current data and reload `2026-01` through the current month from MySQL.
 
 Do not deploy directly from untrusted pull requests with production secrets.
 
@@ -341,12 +334,12 @@ Do not deploy directly from untrusted pull requests with production secrets.
 2. **Connect accounts and repository:** Connect this working directory to the confirmed empty `LasseSviland/bwv-cf` repository without creating a duplicate, and use the already authenticated Cloudflare account for later provisioning.
 3. **Bootstrap repository:** Create workspace, Worker, React app, shared contracts, Wrangler configuration, tests, and local environments.
 4. **Provision Cloudflare:** Create R2 bucket, Queue and DLQ, D1 database, Hyperdrive configuration, Worker environments, and secrets.
-5. **Build ingestion:** Implement catalog reads, keyset pagination, resumable queue state machine, sparse projections, staged publication, validation, and recovery.
+5. **Build ingestion:** Implement D1 catalog reads, keyset pagination, resumable queue state machine, daily gzip snapshots, staged publication, validation, and recovery.
 6. **Build API:** Implement search, entity details, targeted multi-month reads, zero filling, cache semantics, validation, and admin refresh.
 7. **Build frontend:** Implement search and the two detail experiences using shared contracts.
 8. **Harden:** Load-test bulk store responses and R2/API behavior, tune page size and inter-page delay conservatively, verify source impact and refresh duration, add security headers and observability, and rehearse rollback.
 9. **Automate deployment:** Add GitHub Actions, preview/production environments, migrations, deployment, and smoke tests.
-10. **Launch:** Call the authenticated backfill API for every month from `2024-01` through the current month, reconcile samples with MySQL, publish and verify on the Worker hostname, route `bwv.sviland.net` to the verified Worker, monitor the next scheduled runs, and document operations.
+10. **Launch:** Call the authenticated reload API for every month from `2026-01` through the current month, reconcile samples with MySQL, publish and verify on the Worker hostname, route `bwv.sviland.net` to the verified Worker, monitor the next scheduled runs, and document operations.
 
 ## 15. Current Cloudflare references
 

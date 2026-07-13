@@ -39,3 +39,10 @@ jobs:
             https://better-wines-viner.sviland.workers.dev/ > /dev/null
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
             https://better-wines-viner.sviland.workers.dev/api/v1/status)" = "401"
+      - name: Clear and reload data from MySQL
+        env:
+          BWV_API_KEY: ${{ secrets.BWV_API_KEY }}
+        run: |
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Bearer ${BWV_API_KEY}" \
+            https://better-wines-viner.sviland.workers.dev/api/v1/admin/reload > /dev/null

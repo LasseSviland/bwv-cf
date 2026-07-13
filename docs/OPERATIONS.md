@@ -7,7 +7,7 @@
 3. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route.
 4. Configure `API_KEY` with `wrangler secret put API_KEY`.
 5. Verify authenticated health, status, catalog, and SPA password-gate behavior on `workers.dev`.
-6. Start the historical load through `POST /api/v1/admin/backfill`. The default range is `2024-01` through the current Oslo month.
+6. Start the historical load through `POST /api/v1/admin/reload`. The fixed range is `2026-01` through the current Oslo month.
 7. Poll `GET /api/v1/admin/jobs/:jobId` and `/api/v1/status` until every expected month is published.
 8. Reconcile sampled wine/store counts with the source MySQL snapshots.
 9. Add the reversible `bwv.sviland.net/*` Worker route in front of the existing proxied hostname, then repeat desktop and mobile smoke tests.
@@ -16,7 +16,9 @@ Each Queue message and continuation contains its `YYYY-MM` month. Queue delivery
 
 Extraction uses 5,000-row primary-key pages. This was raised from the initial 1,000-row production burn-in only after hundreds of sequential pages completed without source or query errors; database queries remain single-concurrency.
 
-Raw extraction chunks live under `staging/v1/`. The production R2 bucket has a lifecycle rule named `expire-sync-staging` that removes those temporary objects after seven days; published `datasets/v1/` objects are not part of that rule.
+Raw inventory extraction chunks live under `staging/v1/`. The production R2 bucket has a lifecycle rule named `expire-sync-staging` that removes those temporary objects after seven days. Published inventory lives at `datasets/v1/month=YYYY-MM/generation=.../inventory/YYYY-MM-DD.json.gz`: one gzip JSON file contains every positive Better Wines inventory relation for that date. Wines and monopolies are stored in D1, not R2.
+
+Every production deployment calls `/admin/reload` after smoke testing. The reload clears current D1 application data and all R2 objects before rebuilding from MySQL, so read APIs can return `503 dataset_unavailable` until the new backfill publishes data. GitHub Actions needs `BWV_API_KEY`, matching the Worker's `API_KEY` secret, to authorize this step.
 
 ## Routine refresh
 
@@ -29,8 +31,8 @@ Use `POST /api/v1/admin/sync` to replay one month. Use `/admin/refresh` to enque
 - Inspect structured Worker logs by `jobId`, `month`, and `phase`.
 - Transient failures retry with bounded backoff and then move to `better-wines-viner-sync-dlq`.
 - A failed generation never replaces `published_months`; readers continue using the prior complete generation.
-- Replay the failed month after correcting the dependency. Publication writes the manifest first and changes the D1 generation pointer last.
-- Old generations are retained for rollback. To roll back, repoint the D1 month record to a previously validated generation/manifest.
+- Replay the failed month after correcting the dependency. Publication writes every daily gzip object first and changes the D1 month generation pointer last.
+- Routine refreshes retain older R2 generations until the next deployment reload clears the bucket. Roll back code with Wrangler; a deployment reload intentionally rebuilds data instead of preserving the old dataset.
 
 An old, low-ID source row whose `date` is later moved into a recent month cannot be discovered cheaply because the legacy database has no date index. If source evidence shows this behavior, run a controlled full reconciliation rather than relying on the recent month floor.
 
@@ -44,4 +46,4 @@ An old, low-ID source row whose `date` is later moved into a recent month cannot
 
 ## Rollback
 
-Use `wrangler versions list` and `wrangler rollback <VERSION_ID>` for Worker code. Removing the `bwv.sviland.net/*` route immediately restores the prior origin without changing its DNS record. R2 datasets and D1 state remain intact across Worker rollbacks.
+Use `wrangler versions list` and `wrangler rollback <VERSION_ID>` for Worker code. Removing the `bwv.sviland.net/*` route immediately restores the prior origin without changing its DNS record. A Wrangler rollback does not itself run the destructive reload workflow.

@@ -1,14 +1,21 @@
 import { ZodError } from "zod";
 
 import { SyncQueueMessageSchema, type Month, type SyncQueueMessage } from "@bwv/contracts";
-import { dateInOslo, enumerateMonths, firstDateOfMonth, lastDateOfMonth } from "@bwv/data-format";
+import {
+  addDays,
+  dateInOslo,
+  enumerateMonths,
+  firstDateOfMonth,
+  inclusiveDayCount,
+  lastDateOfMonth,
+} from "@bwv/data-format";
 
 import { errorMessage, isPermanentQueueError, PermanentQueueError } from "../errors";
 import { logError, logInfo } from "../log";
 import {
   acquireMonthLease,
   completeExtractionStep,
-  completeProjectionStep,
+  completeInventoryStep,
   completeStep,
   getMonthSync,
   getSourceMonthBound,
@@ -19,21 +26,15 @@ import {
   markMonthRetrying,
   markMonthSkipped,
   markRunStarted,
-  projectionStepCounts,
+  inventoryStepCount,
   publishMonth,
   setRunSourceCeiling,
   upsertSourceMonthBounds,
   type SourceMonthBound,
 } from "../storage/d1";
-import {
-  manifestKey,
-  monopolyProjectionKey,
-  rawChunkKey,
-  wineProjectionKey,
-} from "../storage/keys";
-import { iterateRawChunks, putJson } from "../storage/r2";
+import { dailyInventoryKey, rawChunkKey } from "../storage/keys";
+import { iterateRawChunks, putGzipJson, putJson } from "../storage/r2";
 import type { InventorySourceRowData, MonthManifest, RawInventoryChunk } from "../types";
-import { processInBatches } from "./batches";
 import { getMonopolyCatalog, getWineCatalog, refreshCatalogs } from "./catalogs";
 import {
   DEFAULT_SOURCE_PAGE_SIZE,
@@ -43,11 +44,7 @@ import {
   readInventoryPage,
   withSourceConnection,
 } from "./mysql";
-import {
-  buildMonopolyProjectionsFromChunks,
-  buildWineProjectionsFromChunks,
-  PROJECTION_BUCKET_COUNT,
-} from "./projections";
+import { buildDailyInventorySnapshotFromChunks } from "./projections";
 import { monthFromSourceDate, sourceDateToIso } from "./source-date";
 
 function bootstrapStepKey(message: SyncQueueMessage): string {
@@ -60,13 +57,14 @@ export function queueStepKey(message: SyncQueueMessage): string {
       return bootstrapStepKey(message);
     case "extract":
       return `cursor:${message.cursorId ?? "start"}`;
-    case "project-wines":
-    case "project-monopolies":
-      return `bucket:${message.bucket ?? 0}`;
+    case "project-inventory":
+      return `date:${message.date ?? "missing"}`;
     case "publish":
       return "publish";
     case "refresh-catalogs":
       return `catalog:${message.generation}`;
+    case "reset":
+      return bootstrapStepKey(message);
   }
 }
 
@@ -100,8 +98,8 @@ export function nextExtractionMessage(
         trigger: message.trigger,
         month: message.month,
         generation: message.generation,
-        phase: "project-wines",
-        bucket: 0,
+        phase: "project-inventory",
+        date: firstDateOfMonth(message.month),
       };
 }
 
@@ -329,96 +327,49 @@ async function processExtract(message: SyncQueueMessage, env: Env): Promise<void
   await env.SYNC_QUEUE.send(next, { contentType: "json" });
 }
 
-async function processWineProjection(message: SyncQueueMessage, env: Env): Promise<void> {
+async function processInventoryProjection(message: SyncQueueMessage, env: Env): Promise<void> {
   const startedAt = Date.now();
-  const bucket = message.bucket ?? 0;
-  if (bucket >= PROJECTION_BUCKET_COUNT) {
-    throw new PermanentQueueError(`Invalid wine projection bucket: ${bucket}`);
+  const date = message.date;
+  if (date === undefined || date.slice(0, 7) !== message.month) {
+    throw new PermanentQueueError(`Invalid inventory projection date: ${String(date)}`);
+  }
+  const monthSync = await getMonthSync(env.DB, message.jobId, message.month);
+  if (monthSync === null) throw new PermanentQueueError("Inventory projection state is missing");
+  if (message.month === dateInOslo().slice(0, 7) && monthSync.coveredThrough === null) {
+    await env.SYNC_QUEUE.send(
+      { ...message, phase: "publish", date: undefined },
+      { contentType: "json" },
+    );
+    return;
   }
   const [wines, monopolies] = await Promise.all([getWineCatalog(env), getMonopolyCatalog(env)]);
-  const projections = await buildWineProjectionsFromChunks(
+  const snapshot = await buildDailyInventorySnapshotFromChunks(
     iterateRawChunks(env.DATA_BUCKET, message.month, message.generation),
-    message.month,
-    bucket,
+    date,
+    message.generation,
     new Set(wines.map(({ id }) => id)),
     new Set(monopolies.map(({ id }) => id)),
   );
-  await processInBatches(projections, 5, async (projection) => {
-    await putJson(
-      env.DATA_BUCKET,
-      wineProjectionKey(message.month, message.generation, projection.wineId),
-      projection,
-      "private, max-age=300",
-    );
-  });
-
-  const next = nextProjectionMessage(message);
-  if (next === null) throw new PermanentQueueError("Wine projection has no continuation");
-  await completeProjectionStep(env.DB, message, queueStepKey(message), "wine", projections.length);
-  logInfo("Projected wine inventory", {
+  await putGzipJson(
+    env.DATA_BUCKET,
+    dailyInventoryKey(date, message.generation),
+    snapshot,
+    "private, max-age=300",
+  );
+  await completeInventoryStep(env.DB, message, queueStepKey(message));
+  const next = await nextInventoryMessage(message, env.DB);
+  logInfo("Projected daily inventory", {
     jobId: message.jobId,
     month: message.month,
     generation: message.generation,
-    bucket,
-    objectCount: projections.length,
-    elapsedMs: Date.now() - startedAt,
-  });
-  await env.SYNC_QUEUE.send(next, { contentType: "json" });
-}
-
-async function processMonopolyProjection(message: SyncQueueMessage, env: Env): Promise<void> {
-  const startedAt = Date.now();
-  const bucket = message.bucket ?? 0;
-  if (bucket >= PROJECTION_BUCKET_COUNT) {
-    throw new PermanentQueueError(`Invalid monopoly projection bucket: ${bucket}`);
-  }
-  const [wines, monopolies] = await Promise.all([getWineCatalog(env), getMonopolyCatalog(env)]);
-  const projections = await buildMonopolyProjectionsFromChunks(
-    iterateRawChunks(env.DATA_BUCKET, message.month, message.generation),
-    message.month,
-    bucket,
-    new Set(wines.map(({ id }) => id)),
-    new Set(monopolies.map(({ id }) => id)),
-  );
-  await processInBatches(projections, 5, async (projection) => {
-    await putJson(
-      env.DATA_BUCKET,
-      monopolyProjectionKey(message.month, message.generation, projection.monopolyId),
-      projection,
-      "private, max-age=300",
-    );
-  });
-
-  const next = nextProjectionMessage(message);
-  if (next === null) throw new PermanentQueueError("Monopoly projection has no continuation");
-  await completeProjectionStep(
-    env.DB,
-    message,
-    queueStepKey(message),
-    "monopoly",
-    projections.length,
-  );
-  logInfo("Projected monopoly inventory", {
-    jobId: message.jobId,
-    month: message.month,
-    generation: message.generation,
-    bucket,
-    objectCount: projections.length,
+    date,
+    rowCount: snapshot.inventory.length,
     elapsedMs: Date.now() - startedAt,
   });
   await env.SYNC_QUEUE.send(next, { contentType: "json" });
 }
 
 async function processPublish(message: SyncQueueMessage, env: Env): Promise<void> {
-  const stepCounts = await projectionStepCounts(env.DB, message);
-  if (
-    stepCounts.wines !== PROJECTION_BUCKET_COUNT ||
-    stepCounts.monopolies !== PROJECTION_BUCKET_COUNT
-  ) {
-    throw new Error(
-      `Projection is incomplete (${stepCounts.wines}/${stepCounts.monopolies} buckets)`,
-    );
-  }
   const [monthSync, bound] = await Promise.all([
     getMonthSync(env.DB, message.jobId, message.month),
     getSourceMonthBound(env.DB, message.month),
@@ -442,9 +393,16 @@ async function processPublish(message: SyncQueueMessage, env: Env): Promise<void
     return;
   }
   const coveredThrough = coveredThroughForPublish(message.month, monthSync.coveredThrough);
+  const expectedObjects = inclusiveDayCount(firstDateOfMonth(message.month), coveredThrough);
+  const completedObjects = await inventoryStepCount(env.DB, message);
+  if (completedObjects !== expectedObjects) {
+    throw new Error(
+      `Inventory projection is incomplete (${completedObjects}/${expectedObjects} dates)`,
+    );
+  }
   const generatedAt = new Date().toISOString();
   const manifest: MonthManifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     month: message.month,
     generation: message.generation,
     generatedAt,
@@ -453,21 +411,22 @@ async function processPublish(message: SyncQueueMessage, env: Env): Promise<void
     sourceFloorId: bound.floorId,
     sourceWatermark: monthSync.ceilingId ?? bound.ceilingId,
     sourceRowCount: monthSync.rowsKept,
-    wineObjectCount: monthSync.wineObjectCount,
-    monopolyObjectCount: monthSync.monopolyObjectCount,
+    inventoryObjectCount: monthSync.inventoryObjectCount,
   };
-  const key = manifestKey(message.month, message.generation);
-  // The manifest is deliberately the final R2 write; the D1 pointer is updated only afterward.
-  const object = await putJson(env.DATA_BUCKET, key, manifest, "private, max-age=300");
-  await publishMonth(env.DB, message, manifest, key, object.etag);
+  await publishMonth(
+    env.DB,
+    message,
+    manifest,
+    `d1:published-months/${message.month}`,
+    message.generation,
+  );
   logInfo("Published monthly inventory", {
     jobId: message.jobId,
     month: message.month,
     generation: message.generation,
     sourceWatermark: manifest.sourceWatermark,
     sourceRowCount: manifest.sourceRowCount,
-    wineObjectCount: manifest.wineObjectCount,
-    monopolyObjectCount: manifest.monopolyObjectCount,
+    inventoryObjectCount: manifest.inventoryObjectCount,
     coveredThrough: manifest.coveredThrough,
   });
 }
@@ -491,41 +450,60 @@ async function processRefreshCatalogs(message: SyncQueueMessage, env: Env): Prom
   await sendBatch(env, messages);
 }
 
-export function nextProjectionMessage(message: SyncQueueMessage): SyncQueueMessage | null {
-  const bucket = message.bucket ?? 0;
-  if (message.phase === "project-wines") {
-    return bucket + 1 < PROJECTION_BUCKET_COUNT
-      ? { ...message, bucket: bucket + 1 }
-      : {
-          version: 1,
-          jobId: message.jobId,
-          trigger: message.trigger,
-          month: message.month,
-          generation: message.generation,
-          phase: "project-monopolies",
-          bucket: 0,
-        };
+async function processReset(message: SyncQueueMessage, env: Env): Promise<void> {
+  if (message.fromMonth === undefined || message.throughMonth === undefined) {
+    throw new PermanentQueueError("Reset message is missing its reload range");
   }
-  if (message.phase === "project-monopolies") {
-    return bucket + 1 < PROJECTION_BUCKET_COUNT
-      ? { ...message, bucket: bucket + 1 }
-      : {
-          version: 1,
-          jobId: message.jobId,
-          trigger: message.trigger,
-          month: message.month,
-          generation: message.generation,
-          phase: "publish",
-        };
+  const page = await env.DATA_BUCKET.list({ limit: 1_000 });
+  const keys = page.objects.map(({ key }) => key);
+  if (keys.length > 0) {
+    await env.DATA_BUCKET.delete(keys);
+    logInfo("Cleared R2 data before reload", {
+      jobId: message.jobId,
+      objectCount: keys.length,
+    });
+    await env.SYNC_QUEUE.send(message, { contentType: "json" });
+    return;
   }
-  return null;
+  await completeStep(env.DB, message, queueStepKey(message));
+  await env.SYNC_QUEUE.send({ ...message, phase: "bootstrap-bounds" }, { contentType: "json" });
+}
+
+export async function nextInventoryMessage(
+  message: SyncQueueMessage,
+  db: D1Database,
+): Promise<SyncQueueMessage> {
+  if (message.date === undefined) throw new PermanentQueueError("Projection date is missing");
+  const monthSync = await getMonthSync(db, message.jobId, message.month);
+  if (monthSync === null) throw new PermanentQueueError("Projection state is missing");
+  const coveredThrough = coveredThroughForPublish(message.month, monthSync.coveredThrough);
+  return nextInventoryContinuation(message, coveredThrough);
+}
+
+export function nextInventoryContinuation(
+  message: SyncQueueMessage,
+  coveredThrough: string,
+): SyncQueueMessage {
+  if (message.date === undefined) throw new PermanentQueueError("Projection date is missing");
+  const nextDate = addDays(message.date, 1);
+  return nextDate <= coveredThrough
+    ? { ...message, date: nextDate }
+    : {
+        version: 1,
+        jobId: message.jobId,
+        trigger: message.trigger,
+        month: message.month,
+        generation: message.generation,
+        phase: "publish",
+      };
 }
 
 async function resumeCompletedStep(message: SyncQueueMessage, env: Env): Promise<void> {
   if (message.phase === "publish") return;
-  if (message.phase === "project-wines" || message.phase === "project-monopolies") {
-    const next = nextProjectionMessage(message);
-    if (next !== null) await env.SYNC_QUEUE.send(next, { contentType: "json" });
+  if (message.phase === "project-inventory") {
+    await env.SYNC_QUEUE.send(await nextInventoryMessage(message, env.DB), {
+      contentType: "json",
+    });
     return;
   }
   const monthJobs = await listMonthSyncs(env.DB, message.jobId);
@@ -573,6 +551,13 @@ async function resumeCompletedStep(message: SyncQueueMessage, env: Env): Promise
       });
     }
     await sendBatch(env, messages);
+    return;
+  }
+  if (message.phase === "reset") {
+    if (message.fromMonth === undefined || message.throughMonth === undefined) {
+      throw new Error("Reset range is missing");
+    }
+    await env.SYNC_QUEUE.send({ ...message, phase: "bootstrap-bounds" }, { contentType: "json" });
   }
 }
 
@@ -591,7 +576,7 @@ export async function processQueueMessage(
     return "duplicate";
   }
 
-  if (["extract", "project-wines", "project-monopolies", "publish"].includes(message.phase)) {
+  if (["extract", "project-inventory", "publish"].includes(message.phase)) {
     const acquired = await acquireMonthLease(env.DB, message);
     if (!acquired) {
       await markMonthSkipped(env.DB, message, "A newer or active sync already owns this month");
@@ -606,17 +591,17 @@ export async function processQueueMessage(
     case "extract":
       await processExtract(message, env);
       break;
-    case "project-wines":
-      await processWineProjection(message, env);
-      break;
-    case "project-monopolies":
-      await processMonopolyProjection(message, env);
+    case "project-inventory":
+      await processInventoryProjection(message, env);
       break;
     case "publish":
       await processPublish(message, env);
       break;
     case "refresh-catalogs":
       await processRefreshCatalogs(message, env);
+      break;
+    case "reset":
+      await processReset(message, env);
       break;
   }
   return "completed";
@@ -663,7 +648,11 @@ export async function handleQueueBatch(
       });
       const exhausted = !permanent && queueDeliveryExhausted(queueMessage.attempts);
       if (permanent || exhausted) {
-        if (message.phase === "bootstrap-bounds" || message.phase === "refresh-catalogs") {
+        if (
+          message.phase === "bootstrap-bounds" ||
+          message.phase === "refresh-catalogs" ||
+          message.phase === "reset"
+        ) {
           await markCoordinatorFailed(env.DB, message.jobId, detail);
         } else {
           await markMonthFailed(env.DB, message, detail);

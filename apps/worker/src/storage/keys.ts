@@ -20,22 +20,6 @@ export function rawChunkKey(
   return `${rawChunkPrefix(month, generation)}${from}-${through}.json`;
 }
 
-export function wineProjectionKey(month: string, generation: string, wineId: number): string {
-  return `${generationPrefix(month, generation)}/wines/${wineId}.json`;
-}
-
-export function monopolyProjectionKey(
-  month: string,
-  generation: string,
-  monopolyId: number,
-): string {
-  return `${generationPrefix(month, generation)}/monopolies/${monopolyId}.json`;
-}
-
-export function manifestKey(month: string, generation: string): string {
-  return `${generationPrefix(month, generation)}/manifest.json`;
-}
-
-export function catalogKey(catalog: "wines" | "monopolies", generation: string): string {
-  return `catalog/v1/generation=${generation}/${catalog}.json`;
+export function dailyInventoryKey(date: string, generation: string): string {
+  return `${generationPrefix(date.slice(0, 7), generation)}/inventory/${date}.json.gz`;
 }

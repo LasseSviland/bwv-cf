@@ -15,7 +15,7 @@ All endpoints are under `/api/v1` and require `Authorization: Bearer <API_KEY>`.
 
 Missing source observations inside published coverage are returned as `count: 0` and mean sold out. Positive counts mean in stock. Dates after `coveredThrough` and dates in `missingMonths` are not observations; clients must present them as unavailable rather than sold out. Dates use `YYYY-MM-DD` and product boundaries use `Europe/Oslo`. If dates are omitted, the inclusive period is the latest 30 Oslo calendar days.
 
-The published wine catalog is restricted at ingestion to source rows where `grossist = "Better Wines AS"`. Inventory for wines outside that catalog is excluded from both wine and monopoly projections.
+The D1 wine catalog is restricted at ingestion to source rows where `grossist = "Better Wines AS"`. Inventory for wines outside that catalog is excluded from the published daily snapshots.
 
 The browser can be opened with `?apiKey=<API_KEY>`. This is a frontend bootstrap parameter only: the SPA immediately moves the value into local storage, removes it from the address bar, and continues to send credentials exclusively in the `Authorization` header. API routes never accept query-string credentials.
 
@@ -23,7 +23,8 @@ The browser can be opened with `?apiKey=<API_KEY>`. This is a frontend bootstrap
 
 - `POST /admin/refresh` — queue the current and previous Oslo months.
 - `POST /admin/sync` with `{ "months": ["YYYY-MM"] }` — queue one or more explicit months.
-- `POST /admin/backfill` with optional `{ "fromMonth": "2024-01", "throughMonth": "YYYY-MM" }` — discover bounds once and queue one explicit month message for every month in the range.
+- `POST /admin/backfill` with optional `{ "fromMonth": "2026-01", "throughMonth": "YYYY-MM" }` — discover bounds once and queue one explicit month message for every month in the range. Dates before January 2026 are rejected.
+- `POST /admin/reload` — destructively clear D1 application data and all R2 data, then reload catalogs and inventory from MySQL for January 2026 through the current Oslo month. Production deployment invokes this automatically.
 - `GET /admin/jobs?limit=` — recent parent runs.
 - `GET /admin/jobs/:jobId` — parent run and per-month phase/status details.
 

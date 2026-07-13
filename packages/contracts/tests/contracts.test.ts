@@ -289,8 +289,7 @@ describe("queue messages", () => {
 
   it.each([
     { phase: "extract", cursorId: 12, ceilingId: 9_000_000 },
-    { phase: "project-wines", bucket: 0 },
-    { phase: "project-monopolies", bucket: 4 },
+    { phase: "project-inventory", date: "2026-07-12" },
     { phase: "publish" },
     { phase: "refresh-catalogs" },
   ] as const)("accepts a $phase message", (phaseFields) => {
@@ -305,10 +304,10 @@ describe("queue messages", () => {
         ...base,
         trigger: "backfill",
         phase: "bootstrap-bounds",
-        fromMonth: "2024-01",
+        fromMonth: "2026-01",
         throughMonth: "2026-07",
       }),
-    ).toMatchObject({ phase: "bootstrap-bounds", fromMonth: "2024-01" });
+    ).toMatchObject({ phase: "bootstrap-bounds", fromMonth: "2026-01" });
 
     expect(SyncQueueMessageSchema.safeParse({ ...base, phase: "bootstrap-bounds" }).success).toBe(
       false,
@@ -318,7 +317,7 @@ describe("queue messages", () => {
         ...base,
         phase: "bootstrap-bounds",
         fromMonth: "2026-07",
-        throughMonth: "2024-01",
+        throughMonth: "2026-01",
       }).success,
     ).toBe(false);
   });
@@ -332,6 +331,18 @@ describe("queue messages", () => {
         throughMonth: "2026-07",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts the same bounded range for a destructive reload", () => {
+    expect(
+      SyncQueueMessageSchema.parse({
+        ...base,
+        trigger: "backfill",
+        phase: "reset",
+        fromMonth: "2026-01",
+        throughMonth: "2026-07",
+      }),
+    ).toMatchObject({ phase: "reset", fromMonth: "2026-01" });
   });
 
   it("rejects invalid queue metadata", () => {

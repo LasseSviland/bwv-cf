@@ -2,7 +2,7 @@
 
 Password-protected inventory history for Norwegian Vinmonopolet stores, deployed as one Cloudflare Worker at [bwv.sviland.net](https://bwv.sviland.net).
 
-The Worker serves a React SPA and `/api/v1` API from the edge. User-facing requests read published monthly datasets from R2 and operational pointers from D1; they never query the source MySQL database. A six-hour Cron Trigger queues sequential Hyperdrive ingestion for the current and previous Oslo months. The authenticated backfill API queues every historical month from January 2024 through the current month.
+The Worker serves a React SPA and `/api/v1` API from the edge. Wines, monopolies, catalog versions, and operational state live in D1. R2 contains only inventory data: short-lived extraction chunks plus one published gzip JSON snapshot for every covered date. User-facing requests never query MySQL. A six-hour Cron Trigger queues sequential Hyperdrive ingestion for the current and previous Oslo months, and historical loading starts at January 2026.
 
 The inventory views distinguish three states: positive morning stock, sold out within known source coverage, and unavailable when a day or month has not been published yet.
 
@@ -57,6 +57,6 @@ This uses the checked-in `remote-api` Vite mode to proxy `/api` to `https://bwv.
 
 ## Deployment
 
-Pull requests and branches run formatting, linting, strict TypeScript checks, tests, generated-binding checks, and the production frontend build. Pushes to `main` repeat those checks, apply D1 migrations, and deploy through Wrangler.
+Pull requests and branches run formatting, linting, strict TypeScript checks, tests, generated-binding checks, and the production frontend build. Pushes to `main` repeat those checks, apply D1 migrations, deploy through Wrangler, then call the authenticated reload endpoint. Reload clears D1 application data and every R2 object before importing catalogs and inventory from MySQL for `2026-01` through the current Oslo month.
 
-GitHub Actions requires repository secrets named `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The API token should be scoped only to the Worker and Better Wines resources. See [Operations](docs/OPERATIONS.md) for initial backfill, verification, replay, and rollback.
+GitHub Actions requires repository secrets named `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `BWV_API_KEY`. `BWV_API_KEY` must contain the same value as the Worker's `API_KEY` secret so deployment can start the reload. The Cloudflare API token should be scoped only to the Worker and Better Wines resources. See [Operations](docs/OPERATIONS.md) for reload, verification, replay, and rollback.
