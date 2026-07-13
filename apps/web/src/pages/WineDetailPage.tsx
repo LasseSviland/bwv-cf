@@ -1,4 +1,4 @@
-import { Globe2, Hash, Layers3, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -124,7 +124,7 @@ export const WineDetailPage = () => {
   const storesInStock = latestDate
     ? request.data.monopolies.filter((entry) => latestCount(entry.inventory, latestDate) > 0).length
     : 0;
-  const requiredSoldOut = latestDate
+  const expectedSoldOut = latestDate
     ? request.data.monopolies.filter(
         (entry) =>
           classifyWineForStore(wine, entry.monopoly).status === "required" &&
@@ -135,26 +135,7 @@ export const WineDetailPage = () => {
   return (
     <div className="flex w-full min-w-0 flex-col gap-7 sm:gap-9">
       <DetailHero
-        eyebrow="Wine portfolio"
         title={wine.name}
-        metadata={
-          <>
-            <span className="inline-flex items-center gap-1.5">
-              <Hash className="size-3.5" aria-hidden="true" /> Product {wine.productNumber}
-            </span>
-            {wine.country ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Globe2 className="size-3.5" aria-hidden="true" /> {wine.country}
-              </span>
-            ) : null}
-            {wine.wineCategory || wine.assortment ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Layers3 className="size-3.5" aria-hidden="true" />
-                {[wine.wineCategory, wine.assortment].filter(Boolean).join(" · ")}
-              </span>
-            ) : null}
-          </>
-        }
         metrics={[
           {
             label: "Bottles available",
@@ -167,8 +148,8 @@ export const WineDetailPage = () => {
             detail: `of ${request.data.monopolies.length.toLocaleString("en-GB")} tracked stores`,
           },
           {
-            label: "Required stores sold out",
-            value: requiredSoldOut.toLocaleString("en-GB"),
+            label: "Expected stores sold out",
+            value: expectedSoldOut.toLocaleString("en-GB"),
             detail: "Current fixed-assortment gaps",
           },
         ]}
@@ -176,16 +157,11 @@ export const WineDetailPage = () => {
 
       <EntityMoreInfo kind="wine" entityId={String(wine.id)} label={wine.name} />
 
-      <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6">
+      <section
+        className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
+        aria-label="Availability filters"
+      >
         <div>
-          <p className="text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
-            Availability explorer
-          </p>
-          <h2 className="mt-1 font-serif text-2xl font-normal tracking-[-0.025em]">
-            Find this wine by store
-          </h2>
-        </div>
-        <div className="mt-5 border-t border-border/70 pt-5">
           <PeriodPicker
             period={period}
             onChange={setPeriod}
@@ -213,7 +189,7 @@ export const WineDetailPage = () => {
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
-            Sold out in required assortment
+            Sold out where expected
           </Label>
           <span className="font-medium">{rows.length} stores shown</span>
         </div>
@@ -233,7 +209,7 @@ export const WineDetailPage = () => {
           filter
             ? "No matching stores"
             : soldOutOnly
-              ? "No required stores were sold out"
+              ? "No expected stores were sold out"
               : "No stores carried this wine"
         }
         emptyDescription={

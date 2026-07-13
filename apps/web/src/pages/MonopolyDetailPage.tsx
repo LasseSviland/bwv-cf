@@ -1,4 +1,4 @@
-import { Hash, MapPin, Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -130,7 +130,7 @@ export const MonopolyDetailPage = () => {
   const winesInStock = latestDate
     ? request.data.wines.filter((entry) => latestCount(entry.inventory, latestDate) > 0).length
     : 0;
-  const requiredSoldOut = latestDate
+  const expectedSoldOut = latestDate
     ? request.data.wines.filter(
         (entry) =>
           classifyWineForStore(entry.wine, monopoly).status === "required" &&
@@ -140,28 +140,7 @@ export const MonopolyDetailPage = () => {
   return (
     <div className="flex w-full min-w-0 flex-col gap-7 sm:gap-9">
       <DetailHero
-        eyebrow="Vinmonopolet store"
         title={monopoly.name}
-        metadata={
-          <>
-            <span className="inline-flex items-center gap-1.5">
-              <Hash className="size-3.5" aria-hidden="true" /> Store {monopoly.storeNumber}
-            </span>
-            {monopoly.city ? (
-              <span className="inline-flex items-center gap-1.5">
-                <MapPin className="size-3.5" aria-hidden="true" />
-                {[monopoly.postalCode, monopoly.city].filter(Boolean).join(" ")}
-              </span>
-            ) : null}
-            {monopoly.monopolyCategory ? (
-              <span className="inline-flex items-center gap-1.5">
-                <SlidersHorizontal className="size-3.5" aria-hidden="true" /> Category{" "}
-                {monopoly.monopolyCategory}
-                {monopoly.monopolyProfile ? ` · ${monopoly.monopolyProfile}` : ""}
-              </span>
-            ) : null}
-          </>
-        }
         metrics={[
           {
             label: "Portfolio bottles",
@@ -174,8 +153,8 @@ export const MonopolyDetailPage = () => {
             detail: `of ${request.data.wines.length.toLocaleString("en-GB")} tracked wines`,
           },
           {
-            label: "Required wines sold out",
-            value: requiredSoldOut.toLocaleString("en-GB"),
+            label: "Expected wines sold out",
+            value: expectedSoldOut.toLocaleString("en-GB"),
             detail: "Current fixed-assortment gaps",
           },
         ]}
@@ -183,16 +162,11 @@ export const MonopolyDetailPage = () => {
 
       <EntityMoreInfo kind="monopoly" entityId={String(monopoly.id)} label={monopoly.name} />
 
-      <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6">
+      <section
+        className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
+        aria-label="Availability filters"
+      >
         <div>
-          <p className="text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
-            Availability explorer
-          </p>
-          <h2 className="mt-1 font-serif text-2xl font-normal tracking-[-0.025em]">
-            Explore the store portfolio
-          </h2>
-        </div>
-        <div className="mt-5 border-t border-border/70 pt-5">
           <PeriodPicker
             period={period}
             onChange={setPeriod}
@@ -220,7 +194,7 @@ export const MonopolyDetailPage = () => {
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
-            Required products sold out at some point
+            Expected products sold out at some point
           </Label>
           <span className="font-medium">{rows.length} wines shown</span>
         </div>
@@ -240,7 +214,7 @@ export const MonopolyDetailPage = () => {
           filter
             ? "No matching wines"
             : soldOutOnly
-              ? "No required products were sold out"
+              ? "No expected products were sold out"
               : "No wines were stocked here"
         }
         emptyDescription={

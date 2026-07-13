@@ -142,7 +142,7 @@ describe("InventoryMatrix", () => {
     expect(within(table).queryByLabelText(/sold out/i)).toBeNull();
     expect(
       screen.getByText(
-        "Sold out is used only for the store's fixed assortment. Additional products are optional local stock.",
+        "Sold out means the product was expected as part of the store's fixed assortment. Additional products are optional local stock.",
       ),
     ).toBeTruthy();
   });

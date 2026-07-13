@@ -33,13 +33,16 @@ describe("EntityMoreInfo", () => {
       country: "Tyskland",
       wineCategory: "Hvitvin",
       sourceData: {
-        basic: { productLongName: "Fjordglimt Riesling", volume: 0.75 },
+        basic: { productId: "001234", productLongName: "Fjordglimt Riesling", volume: 0.75 },
+        assortment: { assortment: "Basisutvalget" },
         properties: { organic: true },
         legacyDatabase: { metode: "Fermented in steel tanks" },
       },
     });
 
     expect(await screen.findByText("Style")).toBeTruthy();
+    expect(screen.getByText("001234")).toBeTruthy();
+    expect(screen.getByText("Basisutvalget")).toBeTruthy();
     await user.click(screen.getByText("Complete source data"));
     expect(screen.getByText(/product long name/i)).toBeTruthy();
     expect(screen.getByText("Fjordglimt Riesling")).toBeTruthy();
@@ -58,6 +61,7 @@ describe("EntityMoreInfo", () => {
       city: "Oslo",
       monopolyCategory: "6",
       sourceData: {
+        storeId: "114",
         address: { street: "Bryggegata 9" },
         telephone: "22 01 50 00",
       },
@@ -67,6 +71,7 @@ describe("EntityMoreInfo", () => {
     await user.click(screen.getByText("More info"));
 
     expect(await screen.findByText("Bryggegata 9")).toBeTruthy();
+    expect(screen.getByText("114")).toBeTruthy();
     expect(getMonopoly).toHaveBeenCalledWith("session-key", "114", expect.any(AbortSignal));
   });
 });

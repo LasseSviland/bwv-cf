@@ -115,19 +115,14 @@ export const InventoryMatrix = ({
     <section className="space-y-5" aria-label={`Daily availability by ${entityLabel}`}>
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
-          <p className="text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
-            Inventory history
-          </p>
-          <h2 className="mt-1 font-serif text-3xl font-normal tracking-[-0.03em]">
-            Daily availability
-          </h2>
+          <h2 className="font-serif text-3xl font-normal tracking-[-0.03em]">Daily availability</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             Newest dates appear first. Scroll horizontally to explore the full period.
           </p>
           {showAssortmentExplanation ? (
             <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
-              Sold out is used only for the store's fixed assortment. Additional products are
-              optional local stock.
+              Sold out means the product was expected as part of the store's fixed assortment.
+              Additional products are optional local stock.
             </p>
           ) : null}
         </div>

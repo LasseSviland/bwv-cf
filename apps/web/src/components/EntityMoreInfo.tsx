@@ -6,7 +6,9 @@ import {
   ExternalLink,
   FlaskConical,
   Grape,
+  Hash,
   Info,
+  Layers3,
   LoaderCircle,
   MapPin,
   Phone,
@@ -219,6 +221,7 @@ const TechnicalSource = ({ sourceData }: { sourceData: JsonObject }) => {
 };
 
 const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
+  const productNumber = textAt(sourceData, "basic.productId", "legacyDatabase.varenummer");
   const origin = [
     textAt(sourceData, "origins.origin.country", "legacyDatabase.land"),
     textAt(sourceData, "origins.origin.region", "legacyDatabase.distrikt"),
@@ -241,6 +244,10 @@ const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
   const alcohol = textAt(sourceData, "basic.alcoholContent", "legacyDatabase.alkohol");
   const price = textAt(sourceData, "prices.salesPrice", "legacyDatabase.pris");
   const pricePerLitre = textAt(sourceData, "prices.salesPricePrLiter", "legacyDatabase.literpris");
+  const assortment = textAt(sourceData, "assortment.assortment", "legacyDatabase.produktutvalg");
+  const assortmentGrades = objectsAt(sourceData, "assortment.assortmentGrades")
+    .map((grade) => textAt(grade, "assortmentGrade"))
+    .filter((grade): grade is string => grade !== null);
   const colour = textAt(sourceData, "description.characteristics.colour", "legacyDatabase.farge");
   const odour = textAt(sourceData, "description.characteristics.odour", "legacyDatabase.lukt");
   const taste = textAt(sourceData, "description.characteristics.taste", "legacyDatabase.smak");
@@ -263,7 +270,12 @@ const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ProfileCard
+          icon={<Hash className="size-4" aria-hidden="true" />}
+          label="Product"
+          value={productNumber || "Product number not supplied"}
+        />
         <ProfileCard
           icon={<MapPin className="size-4" aria-hidden="true" />}
           label="Origin"
@@ -292,6 +304,24 @@ const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
                 </span>
               )}
             </>
+          }
+        />
+        <ProfileCard
+          icon={<Layers3 className="size-4" aria-hidden="true" />}
+          label="Assortment"
+          value={
+            assortment || assortmentGrades.length ? (
+              <>
+                {assortment || "Fixed assortment"}
+                {assortmentGrades.length ? (
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {assortmentGrades.join(" · ")}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Not supplied"
+            )
           }
         />
         <ProfileCard
@@ -407,6 +437,7 @@ const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
 };
 
 const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
+  const storeNumber = textAt(sourceData, "storeId", "legacyDatabase.butikk_id");
   const street = textAt(sourceData, "address.street", "legacyDatabase.gateadresse");
   const postalCode = textAt(sourceData, "address.postalCode", "legacyDatabase.gatePostnummer");
   const city = textAt(sourceData, "address.city", "legacyDatabase.gatePoststed");
@@ -420,7 +451,12 @@ const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ProfileCard
+          icon={<Hash className="size-4" aria-hidden="true" />}
+          label="Store"
+          value={storeNumber || "Store number not supplied"}
+        />
         <ProfileCard
           icon={<MapPin className="size-4" aria-hidden="true" />}
           label="Address"
@@ -540,8 +576,7 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
         aria-label={`More information about ${label}`}
       >
         <Info className="size-3.5" aria-hidden="true" />
-        <span className="sr-only">More info</span>
-        {kind === "wine" ? "Wine details" : "Store details"}
+        More info
         <ChevronDown
           className="size-3.5 transition-transform group-open/details:rotate-180"
           aria-hidden="true"
