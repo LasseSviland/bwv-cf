@@ -53,6 +53,52 @@ describe("API contract validation", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/monopolies/114");
   });
 
+  it("loads portfolio stockout statistics for the selected period", async () => {
+    const fetchMock = mockFetch({
+      datasetGeneratedAt: "2026-07-12T08:00:00Z",
+      sourceWatermark: 900,
+      coveredThrough: "2026-07-12",
+      availableDates: ["2026-07-12"],
+      period: { from: "2026-07-12", to: "2026-07-12" },
+      comparisonDate: "2026-07-11",
+      daily: [
+        {
+          date: "2026-07-12",
+          trackedPairs: 10,
+          inStockPairs: 8,
+          soldOutPairs: 2,
+          distinctWinesSoldOut: 1,
+          distinctStoresAffected: 2,
+          newlySoldOutPairs: 1,
+          bottlesLostToStockouts: 3,
+          totalBottles: 82,
+        },
+      ],
+      summary: {
+        observedDays: 1,
+        daysWithStockouts: 1,
+        trackedPairs: 10,
+        stockoutPairDays: 2,
+        distinctPairsSoldOut: 2,
+        distinctWinesSoldOut: 1,
+        distinctStoresAffected: 2,
+        newlySoldOutPairs: 1,
+        bottlesLostToStockouts: 3,
+        averageDailyStockouts: 2,
+        availabilityRate: 0.8,
+        peak: { date: "2026-07-12", soldOutPairs: 2 },
+      },
+    });
+
+    const result = await api.getStatistics("session-key", {
+      from: "2026-07-12",
+      to: "2026-07-12",
+    });
+
+    expect(result.summary.distinctPairsSoldOut).toBe(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/statistics?from=2026-07-12&to=2026-07-12");
+  });
+
   it("returns a catalog only after it passes the shared wine catalog schema", async () => {
     const fetchMock = mockFetch({
       items: [

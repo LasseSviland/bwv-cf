@@ -15,6 +15,7 @@ import {
   MonthSchema,
   PeriodSchema,
   StatusResponseSchema,
+  StatisticsResponseSchema,
   SyncQueueMessageSchema,
   UtcDateTimeSchema,
   WineCatalogResponseSchema,
@@ -26,6 +27,7 @@ import {
   type MonopolyInventoryResponse,
   type MonopolyDetail,
   type StatusResponse,
+  type StatisticsResponse,
   type SyncQueueMessage,
   type WineInventoryResponse,
   type WineDetail,
@@ -253,6 +255,61 @@ describe("entity and inventory schemas", () => {
       MonopolyInventoryResponseSchema.safeParse({
         ...response,
         wines: [{ wine, inventory: [{ date: "2026-07-13", count: 4 }] }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("validates daily and summarized portfolio stockout statistics", () => {
+    const response = {
+      ...freshness,
+      period: { from: "2026-07-11", to: "2026-07-12" },
+      comparisonDate: "2026-07-10",
+      daily: [
+        {
+          date: "2026-07-11",
+          trackedPairs: 20,
+          inStockPairs: 18,
+          soldOutPairs: 2,
+          distinctWinesSoldOut: 1,
+          distinctStoresAffected: 2,
+          newlySoldOutPairs: 1,
+          bottlesLostToStockouts: 3,
+          totalBottles: 94,
+        },
+        {
+          date: "2026-07-12",
+          trackedPairs: 20,
+          inStockPairs: 17,
+          soldOutPairs: 3,
+          distinctWinesSoldOut: 2,
+          distinctStoresAffected: 2,
+          newlySoldOutPairs: 2,
+          bottlesLostToStockouts: 4,
+          totalBottles: 88,
+        },
+      ],
+      summary: {
+        observedDays: 2,
+        daysWithStockouts: 2,
+        trackedPairs: 20,
+        stockoutPairDays: 5,
+        distinctPairsSoldOut: 4,
+        distinctWinesSoldOut: 2,
+        distinctStoresAffected: 3,
+        newlySoldOutPairs: 3,
+        bottlesLostToStockouts: 7,
+        averageDailyStockouts: 2.5,
+        availabilityRate: 0.875,
+        peak: { date: "2026-07-12", soldOutPairs: 3 },
+      },
+    };
+
+    expect(StatisticsResponseSchema.parse(response)).toEqual(response);
+    expectTypeOf(response).toMatchTypeOf<StatisticsResponse>();
+    expect(
+      StatisticsResponseSchema.safeParse({
+        ...response,
+        daily: [{ ...response.daily[0], soldOutPairs: 3 }],
       }).success,
     ).toBe(false);
   });

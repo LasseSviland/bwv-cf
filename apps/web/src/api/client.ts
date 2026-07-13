@@ -4,6 +4,7 @@ import {
   MonopolyDetailSchema,
   MonopolyCatalogResponseSchema,
   MonopolyInventoryResponseSchema,
+  StatisticsResponseSchema,
   StatusResponseSchema,
   WineCatalogResponseSchema,
   WineDetailSchema,
@@ -16,6 +17,7 @@ import type {
   MonopolyCatalogItem,
   MonopolyDetail,
   Period,
+  StatisticsResponse,
   StatusResponse,
   WineInventoryResponse,
   WineCatalogItem,
@@ -134,6 +136,15 @@ export const api = {
       signal,
       announceUnauthorized,
     });
+  },
+
+  getStatistics(apiKey: string, period: Period, signal?: AbortSignal): Promise<StatisticsResponse> {
+    return request(
+      withQuery("/api/v1/statistics", { from: period.from, to: period.to }),
+      apiKey,
+      StatisticsResponseSchema,
+      { signal },
+    );
   },
 
   getWines(

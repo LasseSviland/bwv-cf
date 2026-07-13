@@ -20,6 +20,11 @@ export interface InventoryObservation {
   count: number;
 }
 
+export type DailyInventoryVisitor = (
+  date: string,
+  observations: readonly InventoryObservation[],
+) => void | Promise<void>;
+
 export function completedDatesForPeriod(
   period: Period,
   completed: readonly CompletedInventoryDate[],
@@ -35,13 +40,13 @@ export async function getCompletedDates(
   return period === undefined ? completed : completedDatesForPeriod(period, completed);
 }
 
-export async function loadInventoryObservations(
+export async function visitDailyInventoryObservations(
   bucket: R2Bucket,
   dates: readonly string[],
   productIds: readonly string[],
-): Promise<InventoryObservation[]> {
+  visitor: DailyInventoryVisitor,
+): Promise<void> {
   const requestedProductIds = new Set(productIds);
-  const observations: InventoryObservation[] = [];
 
   for (let offset = 0; offset < dates.length; offset += READ_BATCH_SIZE) {
     const batch = dates.slice(offset, offset + READ_BATCH_SIZE);
@@ -50,12 +55,17 @@ export async function loadInventoryObservations(
         getOptionalJson(bucket, dailyInventoryKey(date), parseDailyInventoryFile),
       ),
     );
-    files.forEach((file, index) => {
-      if (file === null) return;
+    for (const [index, file] of files.entries()) {
       const expectedDate = batch[index];
-      if (expectedDate === undefined || file.date !== expectedDate) {
+      if (expectedDate === undefined) continue;
+      if (file === null) {
+        await visitor(expectedDate, []);
+        continue;
+      }
+      if (file.date !== expectedDate) {
         throw new HttpError(503, "dataset_invalid", "Inventory file identity is invalid");
       }
+      const observations: InventoryObservation[] = [];
       for (const product of file.products) {
         const productId = nestedString(product, "productId");
         if (productId === null) {
@@ -74,7 +84,19 @@ export async function loadInventoryObservations(
           }
         }
       }
-    });
+      await visitor(file.date, observations);
+    }
   }
+}
+
+export async function loadInventoryObservations(
+  bucket: R2Bucket,
+  dates: readonly string[],
+  productIds: readonly string[],
+): Promise<InventoryObservation[]> {
+  const observations: InventoryObservation[] = [];
+  await visitDailyInventoryObservations(bucket, dates, productIds, (_date, daily) => {
+    observations.push(...daily);
+  });
   return observations;
 }

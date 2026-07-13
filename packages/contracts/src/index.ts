@@ -268,6 +268,94 @@ export const MonopolyInventoryResponseSchema = FreshnessSchema.extend({
   });
 export type MonopolyInventoryResponse = z.infer<typeof MonopolyInventoryResponseSchema>;
 
+export const DailyStockoutStatisticsSchema = z
+  .object({
+    date: DateStringSchema,
+    trackedPairs: z.number().int().safe().nonnegative(),
+    inStockPairs: z.number().int().safe().nonnegative(),
+    soldOutPairs: z.number().int().safe().nonnegative(),
+    distinctWinesSoldOut: z.number().int().safe().nonnegative(),
+    distinctStoresAffected: z.number().int().safe().nonnegative(),
+    newlySoldOutPairs: z.number().int().safe().nonnegative(),
+    bottlesLostToStockouts: z.number().int().safe().nonnegative(),
+    totalBottles: z.number().int().safe().nonnegative(),
+  })
+  .strict()
+  .refine(
+    ({ trackedPairs, inStockPairs, soldOutPairs }) => {
+      return inStockPairs + soldOutPairs === trackedPairs;
+    },
+    {
+      message: "In-stock and sold-out pairs must equal tracked pairs",
+      path: ["soldOutPairs"],
+    },
+  );
+export type DailyStockoutStatistics = z.infer<typeof DailyStockoutStatisticsSchema>;
+
+export const StockoutSummarySchema = z
+  .object({
+    observedDays: z.number().int().safe().nonnegative(),
+    daysWithStockouts: z.number().int().safe().nonnegative(),
+    trackedPairs: z.number().int().safe().nonnegative(),
+    stockoutPairDays: z.number().int().safe().nonnegative(),
+    distinctPairsSoldOut: z.number().int().safe().nonnegative(),
+    distinctWinesSoldOut: z.number().int().safe().nonnegative(),
+    distinctStoresAffected: z.number().int().safe().nonnegative(),
+    newlySoldOutPairs: z.number().int().safe().nonnegative(),
+    bottlesLostToStockouts: z.number().int().safe().nonnegative(),
+    averageDailyStockouts: z.number().finite().nonnegative(),
+    availabilityRate: z.number().finite().min(0).max(1),
+    peak: z
+      .object({
+        date: DateStringSchema,
+        soldOutPairs: z.number().int().safe().nonnegative(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .refine(({ daysWithStockouts, observedDays }) => daysWithStockouts <= observedDays, {
+    message: "Days with stockouts cannot exceed observed days",
+    path: ["daysWithStockouts"],
+  });
+export type StockoutSummary = z.infer<typeof StockoutSummarySchema>;
+
+export const StatisticsResponseSchema = FreshnessSchema.extend({
+  period: PeriodSchema,
+  comparisonDate: DateStringSchema.nullable(),
+  daily: z.array(DailyStockoutStatisticsSchema),
+  summary: StockoutSummarySchema,
+})
+  .strict()
+  .superRefine((response, context) => {
+    let previousDate: string | undefined;
+    response.daily.forEach((entry, index) => {
+      if (entry.date < response.period.from || entry.date > response.period.to) {
+        context.addIssue({
+          code: "custom",
+          message: "Statistics date falls outside the response period",
+          path: ["daily", index, "date"],
+        });
+      }
+      if (previousDate !== undefined && entry.date <= previousDate) {
+        context.addIssue({
+          code: "custom",
+          message: "Statistics dates must be unique and sorted in ascending order",
+          path: ["daily", index, "date"],
+        });
+      }
+      previousDate = entry.date;
+    });
+    if (response.summary.observedDays !== response.daily.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Observed days must match the daily statistics length",
+        path: ["summary", "observedDays"],
+      });
+    }
+  });
+export type StatisticsResponse = z.infer<typeof StatisticsResponseSchema>;
+
 export type CatalogResponse<T> = {
   items: T[];
   nextCursor: string | null;

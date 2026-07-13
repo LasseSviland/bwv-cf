@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { cn } from "../lib/utils";
 
 const navItems = [
-  { to: "/", label: "Overview", icon: BarChart3, end: true },
+  { to: "/", label: "Statistics", icon: BarChart3, end: true },
   { to: "/wines", label: "Wines", icon: Wine },
   { to: "/monopolies", label: "Stores", icon: Store },
   { to: "/settings", label: "Settings", icon: Settings },

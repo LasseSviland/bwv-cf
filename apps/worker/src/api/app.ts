@@ -22,6 +22,7 @@ import {
 import { errorResponse, jsonWithEtag } from "./http";
 import { assembleMonopolyInventory, assembleWineInventory } from "./inventory";
 import { getStatus } from "./status";
+import { getStatistics } from "./statistics";
 import { summarizeMonopolies, summarizeWines } from "./summaries";
 
 type AppBindings = { Bindings: Env; Variables: { requestId: string } };
@@ -86,6 +87,11 @@ app.get("/api/v1/health", async (context) => {
 app.get("/api/v1/status", async (context) => {
   const status = await getStatus(context.env);
   return jsonWithEtag(context.req.raw, status, `status:${JSON.stringify(status)}`);
+});
+
+app.get("/api/v1/statistics", async (context) => {
+  const result = await getStatistics(context.env, periodFromUrl(context.req.url));
+  return jsonWithEtag(context.req.raw, result.response, result.etagSeed);
 });
 
 app.get("/api/v1/wines", async (context) => {
