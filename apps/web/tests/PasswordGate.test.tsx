@@ -34,6 +34,7 @@ describe("PasswordGate", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Enter password to access" })).toBeTruthy();
+    expect(screen.getByRole("main").className).toContain("fixed inset-0 overflow-y-auto");
     expect(screen.queryByText(/better wines|vinmonopolet|inventory/i)).toBeNull();
     expect(document.title).toBe("Private access");
     await user.type(screen.getByLabelText("Access password"), "test-session-key");
