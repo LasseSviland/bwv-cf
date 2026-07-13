@@ -12,7 +12,7 @@
 8. Reconcile sampled products, stores, and stock with the Vinmonopolet responses.
 9. Add the reversible `bwv.sviland.net/*` Worker route and repeat desktop and mobile smoke tests.
 
-No historical database migration or destructive R2 reload belongs to the initial release.
+The initial release does not run a destructive R2 reload. Historical data is handled separately by the resumable, two-phase process in [`migration/README.md`](../migration/README.md); it preserves existing daily R2 files by default.
 
 ## Daily sync
 

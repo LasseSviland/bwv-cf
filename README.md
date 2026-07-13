@@ -14,13 +14,14 @@ catalogs/monopolies.json     Complete merged Vinmonopolet store catalog
 inventory/YYYY-MM-DD.json    One complete stock-per-store response per Oslo day
 ```
 
-There is no database dependency in this version. Migrating historical data from the old database is intentionally deferred until the file-based sync is proven in production.
+The deployed Worker has no database dependency. The one-time, local-only historical migration exports the old read-only MySQL source and uploads the resulting files separately; see [`migration/README.md`](migration/README.md).
 
 ## Repository layout
 
 ```text
 apps/worker/       Worker API, Cron producer, Queue consumer, and R2 ingestion
 apps/web/          Responsive React application and Settings sync control
+migration/         Two-phase historical MySQL-to-R2 migration tooling
 packages/contracts Shared API and Queue schemas
 packages/data-format Date and sparse-series helpers
 docs/              API and operations handbooks

@@ -1,5 +1,6 @@
 packages:
   - "apps/*"
+  - "migration"
   - "packages/*"
 
 onlyBuiltDependencies:

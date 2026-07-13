@@ -48,7 +48,7 @@ The read API derives its searchable catalog summaries and inventory matrices fro
 
 ## Out of scope
 
-- Migrating historical wine, store, or inventory data from the old database.
+- Running the local historical migration as part of Worker deployment or daily synchronization. The separate two-phase tool is documented in `migration/README.md`.
 - Writing to or maintaining the old database.
 - One inventory object or Queue message per wine.
 - Destructive reloads during deployment.
