@@ -30,6 +30,23 @@ describe("catalog availability summaries", () => {
     });
   });
 
+  it("keeps fixed stocked plus sold out equal to the expected assortment size", () => {
+    const entries = [
+      { relatedId: 1, inventory: [{ date: "2026-07-13", count: 2 }] },
+      { relatedId: 3, inventory: [{ date: "2026-07-13", count: 4 }] },
+    ];
+    const expectedWineIds = new Set([1, 2]);
+
+    const { currentlyFixedInStock } = countCurrentStockByAssortment(
+      entries,
+      "2026-07-13",
+      expectedWineIds,
+    );
+    const currentlySoldOut = countExpectedSoldOut(entries, "2026-07-13", expectedWineIds);
+
+    expect(currentlyFixedInStock + currentlySoldOut).toBe(expectedWineIds.size);
+  });
+
   it("counts tracked relations that sold out, had stock, and have current stock", () => {
     const result = summarizeAvailability(
       [

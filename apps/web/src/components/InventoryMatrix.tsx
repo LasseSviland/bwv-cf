@@ -157,7 +157,7 @@ export const InventoryMatrix = ({
           containerRef={stickyHeaderRef}
         >
           <colgroup>
-            <col className="w-72" />
+            <col className="w-[18.5rem]" />
             {dates.map((date) => (
               <col className="w-11" key={date} />
             ))}
@@ -165,7 +165,7 @@ export const InventoryMatrix = ({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                className="sticky left-0 z-50 min-w-72 border-r border-b border-border/80 bg-card px-5 shadow-[0_8px_14px_rgb(31_45_37/5%)]"
+                className="sticky left-0 z-50 w-[18.5rem] min-w-[18.5rem] max-w-[18.5rem] border-r border-b border-border/80 bg-card px-5 shadow-[0_8px_14px_rgb(31_45_37/5%)]"
                 rowSpan={2}
                 scope="col"
               >
@@ -214,7 +214,7 @@ export const InventoryMatrix = ({
           }}
         >
           <colgroup>
-            <col className="w-72" />
+            <col className="w-[18.5rem]" />
             {dates.map((date) => (
               <col className="w-11" key={date} />
             ))}
@@ -222,7 +222,7 @@ export const InventoryMatrix = ({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                className="sticky left-0 z-30 min-w-72 border-r border-b border-border/80 bg-card px-5"
+                className="sticky left-0 z-30 w-[18.5rem] min-w-[18.5rem] max-w-[18.5rem] border-r border-b border-border/80 bg-card px-5"
                 rowSpan={2}
                 scope="col"
               >
@@ -267,7 +267,7 @@ export const InventoryMatrix = ({
               return (
                 <TableRow className="group/row hover:bg-muted/20" key={row.id}>
                   <th
-                    className={`sticky left-0 z-20 min-w-72 border-r border-border/80 bg-card px-5 py-4 text-left shadow-[8px_0_18px_rgb(31_45_37/3%)] transition-colors group-hover/row:bg-[#fbfaf6]${separatorClass}`}
+                    className={`sticky left-0 z-20 w-[18.5rem] min-w-[18.5rem] max-w-[18.5rem] border-r border-border/80 bg-card px-5 py-4 text-left shadow-[8px_0_18px_rgb(31_45_37/3%)] transition-colors group-hover/row:bg-[#fbfaf6]${separatorClass}`}
                     scope="row"
                   >
                     <Link

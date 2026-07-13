@@ -9,7 +9,11 @@ import {
   searchMonopolyCatalog,
   searchWineCatalog,
 } from "../src/api/catalog";
-import { monopolyDetailFromSource, wineDetailFromSource } from "../src/ingestion/catalogs";
+import {
+  betterWinesOnly,
+  monopolyDetailFromSource,
+  wineDetailFromSource,
+} from "../src/ingestion/catalogs";
 import type { JsonObject } from "../src/types";
 
 const wines: WineSummary[] = [
@@ -95,6 +99,26 @@ describe("catalog query helpers", () => {
 });
 
 describe("entity details", () => {
+  it("excludes products owned by another importer or distributor", () => {
+    const catalog: JsonObject[] = [
+      {
+        basic: { productId: "100", productLongName: "Better Wines bottle" },
+        logistics: { wholesalerName: "Better Wines AS" },
+      },
+      {
+        basic: { productId: "200", productLongName: "Other importer bottle" },
+        logistics: { wholesalerName: "Another Importer AS" },
+      },
+      {
+        basic: { productId: "300", productLongName: "Unknown distributor bottle" },
+      },
+    ];
+
+    expect(betterWinesOnly(catalog).map((wine) => wine.basic)).toEqual([
+      { productId: "100", productLongName: "Better Wines bottle" },
+    ]);
+  });
+
   it("preserves the complete wine source record in the API detail shape", () => {
     const source: JsonObject = {
       basic: {

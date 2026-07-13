@@ -1,8 +1,10 @@
 import type {
   DailyInventory,
   Freshness,
+  MonopolySummary,
   MonopolyInventoryResponse,
   Period,
+  WineSummary,
   WineInventoryResponse,
 } from "@bwv/contracts";
 import { monthsForPeriod } from "@bwv/data-format";
@@ -11,6 +13,7 @@ import { HttpError } from "../errors";
 import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
 import type { CompletedInventoryDate } from "../types";
 import { getCompletedDates, loadInventoryObservations } from "./daily-inventory";
+import { isWineRequiredAtStore } from "./statistics";
 
 function freshnessFor(period: Period, completed: readonly CompletedInventoryDate[]): Freshness {
   const latest = completed.at(-1);
@@ -38,6 +41,46 @@ function zeroFillKnownDates(
     countByDate.set(value.date, (countByDate.get(value.date) ?? 0) + value.count);
   }
   return knownDates.map((date) => ({ date, count: countByDate.get(date) ?? 0 }));
+}
+
+export function buildWineMonopolySeries(
+  wine: WineSummary,
+  monopolies: readonly MonopolySummary[],
+  observedSeries: ReadonlyMap<number, readonly DailyInventory[]>,
+  knownDates: readonly string[],
+): WineInventoryResponse["monopolies"] {
+  const includedMonopolyIds = new Set(observedSeries.keys());
+  for (const monopoly of monopolies) {
+    if (isWineRequiredAtStore(wine, monopoly)) includedMonopolyIds.add(monopoly.id);
+  }
+
+  return monopolies
+    .filter(({ id }) => includedMonopolyIds.has(id))
+    .map((monopoly) => ({
+      monopoly,
+      inventory: zeroFillKnownDates(observedSeries.get(monopoly.id) ?? [], knownDates),
+    }))
+    .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb-NO"));
+}
+
+export function buildMonopolyWineSeries(
+  monopoly: MonopolySummary,
+  wines: readonly WineSummary[],
+  observedSeries: ReadonlyMap<number, readonly DailyInventory[]>,
+  knownDates: readonly string[],
+): MonopolyInventoryResponse["wines"] {
+  const includedWineIds = new Set(observedSeries.keys());
+  for (const wine of wines) {
+    if (isWineRequiredAtStore(wine, monopoly)) includedWineIds.add(wine.id);
+  }
+
+  return wines
+    .filter(({ id }) => includedWineIds.has(id))
+    .map((wine) => ({
+      wine,
+      inventory: zeroFillKnownDates(observedSeries.get(wine.id) ?? [], knownDates),
+    }))
+    .sort((left, right) => left.wine.name.localeCompare(right.wine.name, "nb-NO"));
 }
 
 function etagSeed(
@@ -81,14 +124,7 @@ export async function assembleWineInventory(
     ...freshnessFor(period, completed),
     wine,
     period,
-    monopolies: [...series.entries()]
-      .flatMap(([monopolyId, inventory]) => {
-        const monopoly = monopolies.find(({ id }) => id === monopolyId);
-        return monopoly === undefined
-          ? []
-          : [{ monopoly, inventory: zeroFillKnownDates(inventory, knownDates) }];
-      })
-      .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb-NO")),
+    monopolies: buildWineMonopolySeries(wine, monopolies, series, knownDates),
   };
   return { response, etagSeed: etagSeed("wine", wineId, period, completed) };
 }
@@ -128,14 +164,7 @@ export async function assembleMonopolyInventory(
     ...freshnessFor(period, completed),
     monopoly,
     period,
-    wines: [...series.entries()]
-      .flatMap(([wineId, inventory]) => {
-        const wine = wines.find(({ id }) => id === wineId);
-        return wine === undefined
-          ? []
-          : [{ wine, inventory: zeroFillKnownDates(inventory, knownDates) }];
-      })
-      .sort((left, right) => left.wine.name.localeCompare(right.wine.name, "nb-NO")),
+    wines: buildMonopolyWineSeries(monopoly, wines, series, knownDates),
   };
   return { response, etagSeed: etagSeed("monopoly", monopolyId, period, completed) };
 }

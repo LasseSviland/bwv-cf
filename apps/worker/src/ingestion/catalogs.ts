@@ -21,6 +21,7 @@ import {
 import type { JsonObject, JsonValue, MonopolyCatalogFile, WineCatalogFile } from "../types";
 import {
   BETTER_WINES_WHOLESALER,
+  belongsToBetterWines,
   fetchAllBetterWines,
   fetchAllMonopolies,
   nestedArray,
@@ -62,6 +63,10 @@ export function mergeWines(
   return [...byProductId.entries()]
     .sort(([left], [right]) => left.localeCompare(right, "en", { numeric: true }))
     .map(([, wine]) => wine);
+}
+
+export function betterWinesOnly(wines: readonly JsonObject[]): JsonObject[] {
+  return wines.filter(belongsToBetterWines);
 }
 
 function monopolyStoreId(monopoly: JsonObject): string {
@@ -201,7 +206,7 @@ export async function syncWines(
     syncedAt,
     source: "vinmonopolet/my-products/v1/details-normal",
     wholesaler: BETTER_WINES_WHOLESALER,
-    wines: mergeWines(previous?.wines ?? [], current),
+    wines: betterWinesOnly(mergeWines(previous?.wines ?? [], current)),
   };
   await putJson(env.DATA_BUCKET, WINES_KEY, file);
   return file;
@@ -217,7 +222,7 @@ export function getRawMonopolyCatalog(env: Env): Promise<MonopolyCatalogFile> {
 
 export async function getWineCatalog(env: Env): Promise<WineSummary[]> {
   const file = await getRawWineCatalog(env);
-  return file.wines.map(wineSummaryFromSource);
+  return betterWinesOnly(file.wines).map(wineSummaryFromSource);
 }
 
 export async function getMonopolyCatalog(env: Env): Promise<MonopolySummary[]> {
@@ -227,7 +232,7 @@ export async function getMonopolyCatalog(env: Env): Promise<MonopolySummary[]> {
 
 export async function getWineDetail(env: Env, wineId: number): Promise<WineDetail | null> {
   const file = await getRawWineCatalog(env);
-  const wine = file.wines.find(
+  const wine = betterWinesOnly(file.wines).find(
     (candidate) => numericId(wineProductId(candidate), "Wine product id") === wineId,
   );
   return wine === undefined ? null : wineDetailFromSource(wine);
