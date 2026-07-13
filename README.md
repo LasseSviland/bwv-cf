@@ -54,7 +54,7 @@ This uses the checked-in `remote-api` Vite mode to proxy `/api` to `https://bwv.
 - R2: `better-wines-viner-data`
 - Queue: `better-wines-viner-sync`
 - DLQ: `better-wines-viner-sync-dlq`
-- Cron: `15 7 * * *` (07:15 UTC; 08:15 Oslo in winter and 09:15 in summer)
+- Cron: `0 6 * * *` (06:00 UTC; 08:00 CEST)
 - Host: `bwv.sviland.net`
 
 The Queue accepts batches of one and has a maximum concurrency of one. A Cron invocation or the Settings button enqueues exactly one `start-sync` message. The consumer runs the three source operations sequentially in that message.

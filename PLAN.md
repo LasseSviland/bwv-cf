@@ -6,7 +6,7 @@ Replace the cloned database loader with a Cloudflare-native synchronization pipe
 
 ## Execution model
 
-1. The daily `15 7 * * *` Cron Trigger enqueues one `start-sync` message.
+1. The daily `0 6 * * *` Cron Trigger enqueues one `start-sync` message at 08:00 CEST.
 2. The Queue consumer processes one message at a time and allows only one concurrent consumer.
 3. It fetches all Better Wines products from `GET /my-products/v1/details-normal` without query parameters.
 4. It reads `catalogs/wines.json`, deep-merges the current records by `basic.productId`, and writes the complete merged catalog.

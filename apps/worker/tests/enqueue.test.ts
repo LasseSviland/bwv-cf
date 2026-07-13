@@ -29,7 +29,7 @@ describe("sync queue producer", () => {
     const send = vi.fn().mockResolvedValue(undefined);
 
     await expect(
-      enqueueScheduled(queueEnv(send), new Date("2026-07-13T07:15:00.000Z")),
+      enqueueScheduled(queueEnv(send), new Date("2026-07-13T06:00:00.000Z")),
     ).resolves.toEqual({ status: "queued", date: "2026-07-13" });
     expect(send).toHaveBeenCalledTimes(1);
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ trigger: "scheduled" }), {

@@ -16,7 +16,7 @@ No historical database migration or destructive R2 reload belongs to the initial
 
 ## Daily sync
 
-The `15 7 * * *` Cron Trigger fires at 07:15 UTC and enqueues exactly one `start-sync` message. The same message is sent by the Settings button. The Queue consumer has a batch size of one and maximum concurrency of one.
+The `0 6 * * *` Cron Trigger fires at 06:00 UTC, which is 08:00 CEST, and enqueues exactly one `start-sync` message. The same message is sent by the Settings button. The Queue consumer has a batch size of one and maximum concurrency of one.
 
 The consumer performs these steps sequentially:
 
