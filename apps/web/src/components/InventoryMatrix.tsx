@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 import type { DailyInventory, Freshness, ISODate } from "../api/types";
 import type { AssortmentStatus } from "../utils/assortment";
@@ -37,6 +38,8 @@ interface InventoryMatrixProps {
   emptyTitle: string;
   emptyDescription: string;
   freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">;
+  title?: string;
+  description?: string;
 }
 
 const dayParts = (date: ISODate) => ({
@@ -100,43 +103,122 @@ export const InventoryMatrix = ({
   emptyTitle,
   emptyDescription,
   freshness,
+  title = "Daily availability",
+  description = "Newest dates appear first. Scroll horizontally to explore the full period.",
 }: InventoryMatrixProps) => {
+  const stickyHeaderRef = useRef<HTMLDivElement>(null);
   const dates = enumerateDates(from, to).reverse();
   const monthGroups = groupDatesByMonth(dates);
   const showAdditional = rows.some((row) => rowStatus(row) === "additional");
   const showUnknown = rows.some((row) => rowStatus(row) === "unknown");
-  const showAssortmentExplanation = showAdditional || showUnknown;
+  const showUnavailable = dates.some((date) => !isInventoryDateAvailable(date, freshness));
+  const requiredCounts = rows
+    .filter((row) => rowStatus(row) === "required")
+    .flatMap((row) => {
+      const observations = inventoryMap(row.inventory);
+      return dates
+        .filter((date) => isInventoryDateAvailable(date, freshness))
+        .map((date) => observations.get(date) ?? 0);
+    });
+  const showInStock = requiredCounts.some((count) => count > 0);
+  const showSoldOut = requiredCounts.some((count) => count === 0);
 
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
   }
 
   return (
-    <section className="space-y-5" aria-label={`Daily availability by ${entityLabel}`}>
+    <section className="space-y-5" aria-label={`${title} by ${entityLabel}`}>
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
-          <h2 className="font-serif text-3xl font-normal tracking-[-0.03em]">Daily availability</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Newest dates appear first. Scroll horizontally to explore the full period.
-          </p>
-          {showAssortmentExplanation ? (
-            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
-              Sold out means the product was expected as part of the store's fixed assortment.
-              Additional products are optional local stock.
-            </p>
-          ) : null}
+          <h2 className="font-serif text-3xl font-normal tracking-[-0.03em]">{title}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
-          <StockLegend showAdditional={showAdditional} showUnknown={showUnknown} />
+          <StockLegend
+            showInStock={showInStock}
+            showSoldOut={showSoldOut}
+            showAdditional={showAdditional}
+            showUnknown={showUnknown}
+            showUnavailable={showUnavailable}
+          />
         </div>
       </div>
 
       <Card
-        className="hidden rounded-3xl border-0 py-0 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/9 md:block"
+        className="hidden gap-0 overflow-visible rounded-3xl border-0 py-0 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/9 md:block"
         tabIndex={0}
         aria-label="Scrollable daily inventory table"
       >
-        <Table className="w-max min-w-full border-separate border-spacing-0">
+        <Table
+          aria-hidden="true"
+          className="w-max min-w-full border-separate border-spacing-0"
+          containerClassName="pointer-events-none sticky top-16 z-50 -mb-21 overflow-hidden rounded-t-xl"
+          containerRef={stickyHeaderRef}
+        >
+          <colgroup>
+            <col className="w-72" />
+            {dates.map((date) => (
+              <col className="w-11" key={date} />
+            ))}
+          </colgroup>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead
+                className="sticky left-0 z-50 min-w-72 border-r border-b border-border/80 bg-card px-5 shadow-[0_8px_14px_rgb(31_45_37/5%)]"
+                rowSpan={2}
+                scope="col"
+              >
+                {entityLabel}
+              </TableHead>
+              {monthGroups.map((group) => (
+                <TableHead
+                  className="h-9 border-r border-b border-border/70 bg-[#ebe9e3] text-center text-[0.65rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+                  key={group.month}
+                  colSpan={group.dates.length}
+                  scope="colgroup"
+                >
+                  {formatMonth(group.month)}
+                </TableHead>
+              ))}
+            </TableRow>
+            <TableRow className="hover:bg-transparent">
+              {dates.map((date, dateIndex) => {
+                const parts = dayParts(date);
+                return (
+                  <TableHead
+                    className={`h-12 min-w-11 border-r border-b border-border/70 p-1 text-center shadow-[0_8px_14px_rgb(31_45_37/5%)] ${
+                      dateIndex === 0 ? "bg-secondary" : "bg-[#f5f3ee]"
+                    }`}
+                    key={date}
+                    scope="col"
+                    title={formatDate(date)}
+                  >
+                    <span className="block text-[0.62rem] text-muted-foreground uppercase">
+                      {parts.weekday}
+                    </span>
+                    <strong className="text-xs">{parts.day}</strong>
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          </TableHeader>
+        </Table>
+
+        <Table
+          className="w-max min-w-full border-separate border-spacing-0"
+          onContainerScroll={(event) => {
+            if (stickyHeaderRef.current) {
+              stickyHeaderRef.current.scrollLeft = event.currentTarget.scrollLeft;
+            }
+          }}
+        >
+          <colgroup>
+            <col className="w-72" />
+            {dates.map((date) => (
+              <col className="w-11" key={date} />
+            ))}
+          </colgroup>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
@@ -148,7 +230,7 @@ export const InventoryMatrix = ({
               </TableHead>
               {monthGroups.map((group) => (
                 <TableHead
-                  className="h-9 border-r border-b border-border/70 bg-muted/55 text-center text-[0.65rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
+                  className="h-9 border-r border-b border-border/70 bg-[#ebe9e3] text-center text-[0.65rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
                   key={group.month}
                   colSpan={group.dates.length}
                   scope="colgroup"
@@ -163,7 +245,7 @@ export const InventoryMatrix = ({
                 return (
                   <TableHead
                     className={`h-12 min-w-11 border-r border-b border-border/70 p-1 text-center ${
-                      dateIndex === 0 ? "bg-secondary" : "bg-muted/25"
+                      dateIndex === 0 ? "bg-secondary" : "bg-[#f5f3ee]"
                     }`}
                     key={date}
                     scope="col"
@@ -179,9 +261,9 @@ export const InventoryMatrix = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row, rowIndex) => {
+            {rows.map((row) => {
               const observations = inventoryMap(row.inventory);
-              const separatorClass = rowIndex < rows.length - 1 ? " border-b border-border" : "";
+              const separatorClass = " border-b border-border";
               return (
                 <TableRow className="group/row hover:bg-muted/20" key={row.id}>
                   <th

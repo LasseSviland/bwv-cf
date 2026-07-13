@@ -79,11 +79,11 @@ const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => 
       role="img"
       aria-labelledby={`${gradientId}-title ${gradientId}-description`}
     >
-      <title id={`${gradientId}-title`}>Daily wine-store stockouts</title>
+      <title id={`${gradientId}-title`}>Daily sold-out wine-store placements</title>
       <desc id={`${gradientId}-description`}>
         {daily.length === 0
           ? "No covered inventory dates in the selected period."
-          : `${daily.length} covered days. Stockouts range from ${Math.min(
+          : `${daily.length} covered days. Sold-out placements range from ${Math.min(
               ...daily.map(({ soldOutPairs }) => soldOutPairs),
             )} to ${maximum} wine-store pairs per day.`}
       </desc>
@@ -256,11 +256,11 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
         </p>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3" aria-label="Selected period stockout summary">
+      <section className="grid gap-4 md:grid-cols-3" aria-label="Selected period sold-out summary">
         <PrimaryMetric
           icon={PackageMinus}
           value={number(summary.distinctPairsSoldOut)}
-          label="wine-store stockouts"
+          label="sold-out wine-store placements"
           detail="Distinct placements that reached zero. One wine at five stores counts as five."
           featured
         />
@@ -273,8 +273,8 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
         <PrimaryMetric
           icon={CalendarOff}
           value={`${number(summary.daysWithStockouts)} / ${number(summary.observedDays)}`}
-          label="days with stockouts"
-          detail={`${number(summary.stockoutPairDays)} total wine-store stockout days in the period.`}
+          label="days with sold-out stores"
+          detail={`${number(summary.stockoutPairDays)} total sold-out wine-store days in the period.`}
         />
       </section>
 
@@ -282,7 +282,7 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
         {[
           {
             icon: Activity,
-            label: "New stockouts",
+            label: "New sold-out placements",
             value: number(summary.newlySoldOutPairs),
             detail: "transitions from positive stock to zero",
           },
@@ -324,7 +324,7 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
         <CardHeader className="flex flex-col gap-4 border-b border-border/60 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-7 sm:py-6">
           <div>
             <CardTitle className="font-serif text-2xl font-normal tracking-[-0.025em] sm:text-3xl">
-              Daily stockout pressure
+              Daily sold-out pressure
             </CardTitle>
             <CardDescription className="mt-1">
               Number of tracked wine-store placements with zero bottles on each covered date.
@@ -359,7 +359,7 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
             Daily detail
           </CardTitle>
           <CardDescription>
-            Exact daily totals for stockout placements, affected wines and stores, and newly
+            Exact daily totals for sold-out placements, affected wines and stores, and newly
             depleted stock.
           </CardDescription>
         </CardHeader>
@@ -377,7 +377,7 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
                 <TableHead className="text-right">Out of stock</TableHead>
                 <TableHead className="text-right">Wines</TableHead>
                 <TableHead className="text-right">Stores</TableHead>
-                <TableHead className="text-right">New stockouts</TableHead>
+                <TableHead className="text-right">New sold-out</TableHead>
                 <TableHead className="text-right">Bottles depleted</TableHead>
                 <TableHead className="pr-5 text-right sm:pr-7">Bottles in stock</TableHead>
               </TableRow>

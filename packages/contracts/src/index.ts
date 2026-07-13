@@ -139,6 +139,9 @@ export const AvailabilitySummarySchema = z
     soldOutAtSomePoint: z.number().int().safe().nonnegative(),
     inStockAtSomePoint: z.number().int().safe().nonnegative(),
     currentlyInStock: z.number().int().safe().nonnegative(),
+    currentlyFixedInStock: z.number().int().safe().nonnegative().optional(),
+    currentlyAdditionalInStock: z.number().int().safe().nonnegative().optional(),
+    currentlySoldOut: z.number().int().safe().nonnegative().optional(),
     bottlesByDate: z.array(DailyInventorySchema),
   })
   .strict();

@@ -1,4 +1,4 @@
-import { Search, X } from "lucide-react";
+import { ArrowUpDown, Search, X } from "lucide-react";
 import {
   startTransition,
   useDeferredValue,
@@ -21,7 +21,10 @@ interface CatalogBrowserProps<T> {
   kind: string;
   title: string;
   description?: string;
+  headerEyebrow?: string | null;
+  latestOnly?: boolean;
   searchLabel: string;
+  hideSearchLabel?: boolean;
   searchPlaceholder: string;
   emptyTitle: string;
   emptyDescription: string;
@@ -35,6 +38,12 @@ interface CatalogBrowserProps<T> {
     signal?: AbortSignal,
   ) => Promise<CatalogResponse<T>>;
   sortItems?: (left: T, right: T) => number;
+  sortOptions?: Array<{
+    value: string;
+    label: string;
+    compare: (left: T, right: T) => number;
+  }>;
+  defaultSort?: string;
   renderItem: (item: T, period: { from: string; to: string }) => ReactNode;
 }
 
@@ -119,7 +128,10 @@ export const CatalogBrowser = <T,>({
   kind,
   title,
   description,
+  headerEyebrow = "Portfolio",
+  latestOnly = false,
   searchLabel,
+  hideSearchLabel = false,
   searchPlaceholder,
   emptyTitle,
   emptyDescription,
@@ -129,10 +141,14 @@ export const CatalogBrowser = <T,>({
   pageSize = DISPLAY_PAGE_SIZE,
   load,
   sortItems,
+  sortOptions = [],
+  defaultSort,
   renderItem,
 }: CatalogBrowserProps<T>) => {
   const { apiKey, status } = useAuth();
   const { period, setPeriod } = usePeriodSearch();
+  const latestDate = status?.freshness?.coveredThrough;
+  const requestPeriod = latestOnly && latestDate ? { from: latestDate, to: latestDate } : period;
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("q") ?? "";
   const [draft, setDraft] = useState(queryParam);
@@ -142,6 +158,8 @@ export const CatalogBrowser = <T,>({
   const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
   const [error, setError] = useState<Error | null>(null);
   const [revision, setRevision] = useState(0);
+  const [sortValue, setSortValue] = useState(defaultSort ?? sortOptions[0]?.value ?? "");
+  const activeSort = sortOptions.find(({ value }) => value === sortValue)?.compare ?? sortItems;
 
   useEffect(() => {
     if (!apiKey) return;
@@ -162,8 +180,8 @@ export const CatalogBrowser = <T,>({
             query: undefined,
             cursor,
             limit: pageSize,
-            from: period.from,
-            to: period.to,
+            from: requestPeriod.from,
+            to: requestPeriod.to,
           },
           controller.signal,
         );
@@ -187,11 +205,11 @@ export const CatalogBrowser = <T,>({
     return () => controller.abort();
     // `load` is a stable API method; query and revision are the request identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, pageSize, period.from, period.to, revision]);
+  }, [apiKey, pageSize, requestPeriod.from, requestPeriod.to, revision]);
 
   const sortedItems = useMemo(
-    () => rankSearchItems(items, query, searchFields, sortItems),
-    [items, query, searchFields, sortItems],
+    () => rankSearchItems(items, query, searchFields, activeSort),
+    [activeSort, items, query, searchFields],
   );
   const visibleItems = sortedItems.slice(0, visibleCount);
 
@@ -206,40 +224,89 @@ export const CatalogBrowser = <T,>({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-7 sm:gap-9">
-      <PageHeader eyebrow="Portfolio" title={title} description={description} />
-      <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5">
+      <PageHeader eyebrow={headerEyebrow ?? undefined} title={title} description={description} />
+      <section
+        className={
+          latestOnly
+            ? ""
+            : "rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5"
+        }
+      >
         <div className="flex flex-col gap-5">
-          <div>
-            <p className="mb-2.5 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
-              Inventory period
-            </p>
-            <PeriodPicker
-              period={period}
-              onChange={setPeriod}
-              availableMonths={status?.availableMonths}
-            />
-          </div>
-          <div className="border-t border-border/70 pt-4" role="search">
+          {!latestOnly ? (
+            <div>
+              <p className="mb-2.5 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+                Inventory period
+              </p>
+              <PeriodPicker
+                period={period}
+                onChange={setPeriod}
+                availableMonths={status?.availableMonths}
+              />
+            </div>
+          ) : null}
+          <div className={latestOnly ? "" : "border-t border-border/70 pt-4"} role="search">
             <label
-              className="mb-2.5 block text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase"
+              className={
+                hideSearchLabel
+                  ? "sr-only"
+                  : "mb-2.5 block text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase"
+              }
               htmlFor={`${kind}-search`}
             >
               {searchLabel}
             </label>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                className="h-12 rounded-2xl border-border/80 bg-background/70 pr-4 pl-11 shadow-none"
-                id={`${kind}-search`}
-                type="search"
-                value={draft}
-                placeholder={searchPlaceholder || searchLabel}
-                aria-label={searchLabel}
-                onChange={(event) => updateSearch(event.target.value)}
-              />
+            <div
+              className={sortOptions.length ? "grid gap-3 sm:grid-cols-[minmax(0,1fr)_14rem]" : ""}
+            >
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <Input
+                  className={
+                    latestOnly
+                      ? "h-12 rounded-2xl border-foreground/20 bg-card pr-4 pl-11 shadow-[0_10px_30px_rgb(31_45_37/6%)]"
+                      : "h-12 rounded-2xl border-border/80 bg-background/70 pr-4 pl-11 shadow-none"
+                  }
+                  id={`${kind}-search`}
+                  type="search"
+                  value={draft}
+                  placeholder={searchPlaceholder || searchLabel}
+                  aria-label={searchLabel}
+                  onChange={(event) => updateSearch(event.target.value)}
+                />
+              </div>
+              {sortOptions.length ? (
+                <div className="relative">
+                  <ArrowUpDown
+                    className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <select
+                    aria-label={`Sort ${kind}`}
+                    className="h-12 w-full appearance-none rounded-2xl border border-border/80 bg-background/70 pr-9 pl-11 text-sm text-foreground shadow-none outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    value={sortValue}
+                    onChange={(event) => {
+                      setSortValue(event.target.value);
+                      setVisibleCount(DISPLAY_PAGE_SIZE);
+                    }}
+                  >
+                    {sortOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-xs text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    ▾
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -291,7 +358,7 @@ export const CatalogBrowser = <T,>({
                 }
                 key={itemKey(item)}
               >
-                {renderItem(item, period)}
+                {renderItem(item, requestPeriod)}
               </div>
             ))}
           </div>

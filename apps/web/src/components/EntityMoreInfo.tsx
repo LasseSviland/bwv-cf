@@ -33,6 +33,7 @@ interface EntityMoreInfoProps {
   entityId: string;
   label: string;
   className?: string;
+  sourceData?: JsonObject | null;
 }
 
 const meaningful = (value: JsonValue): boolean => {
@@ -125,7 +126,7 @@ const DataValue = ({ value, path }: { value: JsonValue; path: string }) => {
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map((item, index) => (
           <div
-            className="rounded-xl border border-border/70 bg-background/60 p-3"
+            className="rounded-xl border border-border/80 bg-card p-3 shadow-[0_8px_24px_rgb(31_45_37/4%)]"
             key={`${path}-${index}`}
           >
             <DataValue value={item} path={`${path}.${String(index)}`} />
@@ -165,7 +166,7 @@ const ProfileCard = ({
   label: string;
   value: ReactNode;
 }) => (
-  <div className="rounded-2xl border border-border/65 bg-background/55 p-4">
+  <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-[0_8px_24px_rgb(31_45_37/4%)]">
     <div className="flex items-center gap-2 text-primary">
       {icon}
       <p className="text-[0.62rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
@@ -185,7 +186,7 @@ const Section = ({
   title: string;
   children: ReactNode;
 }) => (
-  <section className="rounded-2xl border border-border/65 bg-background/45 p-5 sm:p-6">
+  <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-[0_8px_24px_rgb(31_45_37/4%)] sm:p-6">
     <div className="flex items-center gap-2.5 text-primary">
       {icon}
       <h3 className="font-serif text-xl font-normal tracking-[-0.02em]">{title}</h3>
@@ -198,7 +199,7 @@ const TechnicalSource = ({ sourceData }: { sourceData: JsonObject }) => {
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="group/source rounded-2xl border border-border/70 bg-background/40"
+      className="group/source rounded-2xl border border-border/80 bg-card shadow-[0_8px_24px_rgb(31_45_37/4%)]"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-5">
@@ -443,11 +444,39 @@ const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
   const city = textAt(sourceData, "address.city", "legacyDatabase.gatePoststed");
   const phone = textAt(sourceData, "telephone", "legacyDatabase.telefonnummer");
   const email = textAt(sourceData, "email");
-  const status = textAt(sourceData, "status");
   const category = textAt(sourceData, "category", "legacyDatabase.kategori");
   const profile = textAt(sourceData, "profile");
   const assortment = textAt(sourceData, "storeAssortment");
   const hours = objectsAt(sourceData, "openingHours.regularHours");
+  const normalizedHours = hours
+    .map((entry, index) => {
+      const day = display(entry.dayOfTheWeek) || `Day ${index + 1}`;
+      const closed = entry.closed === true;
+      const opening = display(entry.openingTime);
+      const closing = display(entry.closingTime);
+      return {
+        day,
+        value: closed ? "Closed" : [opening, closing].filter(Boolean).join("–"),
+      };
+    })
+    .filter(({ day }) => day.toLocaleLowerCase("en-GB") !== "sunday");
+  const weekdayNames = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+  const weekdayHours = weekdayNames.map((weekday) =>
+    normalizedHours.find(({ day }) => day.toLocaleLowerCase("en-GB") === weekday),
+  );
+  const sharedWeekdayHours =
+    weekdayHours.every((entry) => entry !== undefined) &&
+    weekdayHours.every((entry) => entry?.value === weekdayHours[0]?.value)
+      ? weekdayHours[0]?.value
+      : null;
+  const displayHours = sharedWeekdayHours
+    ? [
+        { day: "Monday–Friday", value: sharedWeekdayHours },
+        ...normalizedHours.filter(
+          ({ day }) => !weekdayNames.includes(day.toLocaleLowerCase("en-GB")),
+        ),
+      ]
+    : normalizedHours;
 
   return (
     <div className="space-y-4">
@@ -488,34 +517,23 @@ const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
               .join(" · ") || "Not supplied"
           }
         />
-        <ProfileCard
-          icon={<Sparkles className="size-4" aria-hidden="true" />}
-          label="Status"
-          value={status || "Status not supplied"}
-        />
       </div>
 
-      {hours.length ? (
+      {displayHours.length ? (
         <Section
           icon={<Clock3 className="size-4" aria-hidden="true" />}
           title="Regular opening hours"
         >
           <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-            {hours.map((entry, index) => {
-              const day = display(entry.dayOfTheWeek) || `Day ${index + 1}`;
-              const closed = entry.closed === true;
-              const opening = display(entry.openingTime);
-              const closing = display(entry.closingTime);
-              return (
-                <div
-                  className="flex items-center justify-between gap-4 border-b border-border/65 py-2"
-                  key={`${day}-${index}`}
-                >
-                  <dt className="font-medium text-foreground">{day}</dt>
-                  <dd>{closed ? "Closed" : [opening, closing].filter(Boolean).join("–")}</dd>
-                </div>
-              );
-            })}
+            {displayHours.map(({ day, value }) => (
+              <div
+                className="flex items-center justify-between gap-4 border-b border-border/65 py-2"
+                key={day}
+              >
+                <dt className="font-medium text-foreground">{day}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
           </dl>
         </Section>
       ) : null}
@@ -524,7 +542,13 @@ const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
   );
 };
 
-export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreInfoProps) => {
+export const EntityMoreInfo = ({
+  kind,
+  entityId,
+  label,
+  className,
+  sourceData: suppliedSourceData,
+}: EntityMoreInfoProps) => {
   const { apiKey } = useAuth();
   const [state, setState] = useState<LoadState>("idle");
   const [sourceData, setSourceData] = useState<JsonObject | null>(null);
@@ -534,7 +558,7 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
   useEffect(() => () => controller.current?.abort(), []);
 
   const load = (): void => {
-    if (!apiKey || state === "loading" || state === "loaded") return;
+    if (suppliedSourceData || !apiKey || state === "loading" || state === "loaded") return;
     controller.current?.abort();
     const requestController = new AbortController();
     controller.current = requestController;
@@ -564,15 +588,9 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
   };
 
   return (
-    <details
-      className={cn(
-        "group/details rounded-2xl border border-transparent transition-colors open:border-border/70 open:bg-muted/25",
-        className,
-      )}
-      onToggle={toggle}
-    >
+    <details className={cn("group/details", className)} onToggle={toggle}>
       <summary
-        className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1.5 pr-2.5 pl-0 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label={`More information about ${label}`}
       >
         <Info className="size-3.5" aria-hidden="true" />
@@ -582,7 +600,7 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
           aria-hidden="true"
         />
       </summary>
-      <div className="border-t border-border/70 px-3 py-4 sm:px-5 sm:py-5">
+      <div className="pt-4">
         {state === "loading" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -599,11 +617,11 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
             </AlertDescription>
           </Alert>
         ) : null}
-        {sourceData ? (
+        {suppliedSourceData || sourceData ? (
           kind === "wine" ? (
-            <WineProfile sourceData={sourceData} />
+            <WineProfile sourceData={suppliedSourceData ?? sourceData!} />
           ) : (
-            <StoreProfile sourceData={sourceData} />
+            <StoreProfile sourceData={suppliedSourceData ?? sourceData!} />
           )
         ) : null}
       </div>

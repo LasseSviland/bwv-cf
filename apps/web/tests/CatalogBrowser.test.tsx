@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -127,5 +127,50 @@ describe("CatalogBrowser", () => {
     expect(load.mock.calls[0]?.[1]).toMatchObject({ limit: 1000, cursor: undefined });
     expect(container.querySelectorAll("[data-catalog-item]")).toHaveLength(75);
     expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy();
+  });
+
+  it("sorts the complete result set with the selected dropdown option", async () => {
+    const items = [
+      { name: "Alpha", stock: 2 },
+      { name: "Beta", stock: 9 },
+    ];
+    const { container } = render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <CatalogBrowser
+          kind="stores"
+          title="Stores"
+          searchLabel="Search stores"
+          searchPlaceholder="Search"
+          emptyTitle="No stores"
+          emptyDescription="Nothing found"
+          itemKey={(item) => item.name}
+          load={() => Promise.resolve({ items, nextCursor: null })}
+          defaultSort="name"
+          sortOptions={[
+            {
+              value: "name",
+              label: "Name",
+              compare: (left, right) => left.name.localeCompare(right.name),
+            },
+            {
+              value: "stock",
+              label: "Wines in stock",
+              compare: (left, right) => right.stock - left.stock,
+            },
+          ]}
+          renderItem={(item) => <span data-store-name={item.name}>{item.name}</span>}
+        />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("2 results");
+    const names = () =>
+      [...container.querySelectorAll("[data-store-name]")].map((item) => item.textContent);
+    expect(names()).toEqual(["Alpha", "Beta"]);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort stores" }), {
+      target: { value: "stock" },
+    });
+    expect(names()).toEqual(["Beta", "Alpha"]);
   });
 });

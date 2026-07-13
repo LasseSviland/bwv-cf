@@ -1,45 +1,76 @@
-import { ArrowRight, Hash, MapPin, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, MapPin, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import type { MonopolyCatalogItem, Period } from "../api/types";
-import { BottleHistory } from "../components/BottleHistory";
+import type { MonopolyCatalogItem } from "../api/types";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
 
-const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; period: Period }) => {
-  const href = `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`;
+const MonopolyRow = ({ monopoly }: { monopoly: MonopolyCatalogItem }) => {
+  const href = `/monopolies/${monopoly.id}`;
+  const currentlyFixedInStock = monopoly.availability.currentlyFixedInStock;
+  const currentlyAdditionalInStock = monopoly.availability.currentlyAdditionalInStock;
+  const currentlySoldOut = monopoly.availability.currentlySoldOut;
+  const detailedCategory = (monopoly.storeAssortment ?? monopoly.monopolyCategory)?.replace(
+    /^SB/i,
+    "",
+  );
   return (
-    <div className="grid gap-5 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:py-7">
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(9rem,0.75fr)] gap-x-5 gap-y-4 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:gap-5 lg:py-7">
       <div className="min-w-0">
-        <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.14em] text-primary/65 uppercase">
-          Vinmonopolet store
-        </p>
         <h2 className="font-serif text-2xl leading-tight font-normal tracking-[-0.025em]">
           <Link className="transition-colors hover:text-primary/70" to={href} title={monopoly.name}>
             {monopoly.name}
           </Link>
         </h2>
         <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <Hash className="size-3" aria-hidden="true" /> Store {monopoly.storeNumber}
-          </span>
-          {monopoly.city ? (
+          {monopoly.postalCode || monopoly.city ? (
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="size-3" aria-hidden="true" />
               {[monopoly.postalCode, monopoly.city].filter(Boolean).join(" ")}
             </span>
           ) : null}
-          {monopoly.monopolyCategory ? (
+          {detailedCategory ? (
             <span className="inline-flex items-center gap-1.5">
               <SlidersHorizontal className="size-3" aria-hidden="true" /> Category{" "}
-              {monopoly.monopolyCategory}
-              {monopoly.monopolyProfile ? ` · ${monopoly.monopolyProfile}` : ""}
+              {detailedCategory}
             </span>
           ) : null}
         </div>
       </div>
-      <BottleHistory inventory={monopoly.availability.bottlesByDate} label={monopoly.name} />
+      <dl
+        className="grid grid-cols-1 gap-3 lg:grid-cols-3"
+        aria-label={`Latest wine availability at ${monopoly.name}`}
+      >
+        <div className="flex items-baseline justify-between gap-3 border-l border-border/80 pl-4">
+          <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            Fixed wines stocked
+          </dt>
+          <dd className="shrink-0 text-2xl leading-none font-semibold tracking-[-0.04em] text-primary tabular-nums">
+            {currentlyFixedInStock === undefined
+              ? "—"
+              : currentlyFixedInStock.toLocaleString("en-GB")}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3 border-l border-border/80 pl-4">
+          <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            Additional wines stocked
+          </dt>
+          <dd className="shrink-0 text-2xl leading-none font-semibold tracking-[-0.04em] text-primary tabular-nums">
+            {currentlyAdditionalInStock === undefined
+              ? "—"
+              : currentlyAdditionalInStock.toLocaleString("en-GB")}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3 border-l border-border/80 pl-4">
+          <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            Wines sold out
+          </dt>
+          <dd className="shrink-0 text-2xl leading-none font-semibold tracking-[-0.04em] text-rose-700 tabular-nums">
+            {currentlySoldOut === undefined ? "—" : currentlySoldOut.toLocaleString("en-GB")}
+          </dd>
+        </div>
+      </dl>
       <Button
         asChild
         variant="ghost"
@@ -51,7 +82,7 @@ const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; peri
         </Link>
       </Button>
       <EntityMoreInfo
-        className="lg:col-span-3"
+        className="col-span-2 lg:col-span-3"
         kind="monopoly"
         entityId={String(monopoly.id)}
         label={monopoly.name}
@@ -64,8 +95,10 @@ export const MonopoliesPage = () => (
   <CatalogBrowser<MonopolyCatalogItem>
     kind="monopolies"
     title="Stores"
-    description="See every Vinmonopolet location at a glance, from assortment profile to daily portfolio stock."
+    headerEyebrow={null}
+    latestOnly
     searchLabel="Search monopolies"
+    hideSearchLabel
     searchPlaceholder="Search by store name, number, postcode, city or category"
     emptyTitle="No monopolies found"
     emptyDescription="Try another store name, number, postcode or city."
@@ -91,15 +124,44 @@ export const MonopoliesPage = () => (
       monopoly.storeAssortment ?? "",
     ]}
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
-    sortItems={(left, right) =>
-      (right.availability.bottlesByDate.at(-1)?.count ?? 0) -
-        (left.availability.bottlesByDate.at(-1)?.count ?? 0) ||
-      right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
-      right.availability.currentlyInStock - left.availability.currentlyInStock ||
-      left.name.localeCompare(right.name, "nb-NO")
-    }
-    renderItem={(monopoly, period) => (
-      <MonopolyRow key={monopoly.id} monopoly={monopoly} period={period} />
-    )}
+    defaultSort="wines-in-stock"
+    sortOptions={[
+      {
+        value: "name",
+        label: "Name",
+        compare: (left, right) => left.name.localeCompare(right.name, "nb-NO"),
+      },
+      {
+        value: "category",
+        label: "Category",
+        compare: (left, right) => {
+          const leftCategory = left.storeAssortment ?? left.monopolyCategory;
+          const rightCategory = right.storeAssortment ?? right.monopolyCategory;
+          if (!leftCategory && rightCategory) return 1;
+          if (leftCategory && !rightCategory) return -1;
+          return (
+            (rightCategory ?? "").localeCompare(leftCategory ?? "", "nb-NO", {
+              numeric: true,
+            }) || left.name.localeCompare(right.name, "nb-NO")
+          );
+        },
+      },
+      {
+        value: "wines-in-stock",
+        label: "Wines in stock",
+        compare: (left, right) =>
+          right.availability.currentlyInStock - left.availability.currentlyInStock ||
+          left.name.localeCompare(right.name, "nb-NO"),
+      },
+      {
+        value: "wines-sold-out",
+        label: "Wines sold out",
+        compare: (left, right) =>
+          (right.availability.currentlySoldOut ?? -1) -
+            (left.availability.currentlySoldOut ?? -1) ||
+          left.name.localeCompare(right.name, "nb-NO"),
+      },
+    ]}
+    renderItem={(monopoly) => <MonopolyRow key={monopoly.id} monopoly={monopoly} />}
   />
 );

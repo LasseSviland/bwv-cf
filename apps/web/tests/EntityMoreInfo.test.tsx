@@ -64,6 +64,17 @@ describe("EntityMoreInfo", () => {
         storeId: "114",
         address: { street: "Bryggegata 9" },
         telephone: "22 01 50 00",
+        openingHours: {
+          regularHours: [
+            { dayOfTheWeek: "Monday", openingTime: "10:00", closingTime: "18:00" },
+            { dayOfTheWeek: "Tuesday", openingTime: "10:00", closingTime: "18:00" },
+            { dayOfTheWeek: "Wednesday", openingTime: "10:00", closingTime: "18:00" },
+            { dayOfTheWeek: "Thursday", openingTime: "10:00", closingTime: "18:00" },
+            { dayOfTheWeek: "Friday", openingTime: "10:00", closingTime: "18:00" },
+            { dayOfTheWeek: "Saturday", openingTime: "10:00", closingTime: "16:00" },
+            { dayOfTheWeek: "Sunday", closed: true },
+          ],
+        },
       },
     });
 
@@ -72,6 +83,10 @@ describe("EntityMoreInfo", () => {
 
     expect(await screen.findByText("Bryggegata 9")).toBeTruthy();
     expect(screen.getByText("114")).toBeTruthy();
+    expect(screen.getByText("Monday–Friday")).toBeTruthy();
+    expect(screen.getByText("Saturday")).toBeTruthy();
+    expect(screen.queryByText("Sunday")).toBeNull();
+    expect(screen.getAllByText("10:00–18:00")).toHaveLength(1);
     expect(getMonopoly).toHaveBeenCalledWith("session-key", "114", expect.any(AbortSignal));
   });
 });

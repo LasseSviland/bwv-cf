@@ -12,6 +12,7 @@ import { HttpError } from "../errors";
 import { getWineCatalog } from "../ingestion/catalogs";
 import type { InventoryObservation } from "./daily-inventory";
 import { getCompletedDates, loadInventoryObservations } from "./daily-inventory";
+import { isWineRequiredAtStore } from "./statistics";
 
 export interface RelatedInventory {
   relatedId: number;
@@ -53,6 +54,17 @@ export function summarizeAvailability(
       latestDate === undefined
         ? 0
         : [...observations.values()].filter((dates) => dates.has(latestDate)).length,
+    ...(validRelatedIds === undefined
+      ? {}
+      : {
+          currentlySoldOut: Math.max(
+            validRelatedIds.size -
+              (latestDate === undefined
+                ? 0
+                : [...observations.values()].filter((dates) => dates.has(latestDate)).length),
+            0,
+          ),
+        }),
     bottlesByDate: knownDates.map((date) => ({ date, count: bottleTotals.get(date) ?? 0 })),
   };
 }
@@ -94,6 +106,42 @@ function entriesFor(
   }));
 }
 
+export function countExpectedSoldOut(
+  entries: readonly RelatedInventory[],
+  latestDate: string,
+  expectedRelatedIds: ReadonlySet<number>,
+): number {
+  const currentlyStocked = new Set(
+    entries
+      .filter((entry) =>
+        entry.inventory.some(({ date, count }) => date === latestDate && count > 0),
+      )
+      .map(({ relatedId }) => relatedId),
+  );
+  return [...expectedRelatedIds].filter((relatedId) => !currentlyStocked.has(relatedId)).length;
+}
+
+export function countCurrentStockByAssortment(
+  entries: readonly RelatedInventory[],
+  latestDate: string,
+  expectedRelatedIds: ReadonlySet<number>,
+): { currentlyFixedInStock: number; currentlyAdditionalInStock: number } {
+  const currentlyStocked = new Set(
+    entries
+      .filter((entry) =>
+        entry.inventory.some(({ date, count }) => date === latestDate && count > 0),
+      )
+      .map(({ relatedId }) => relatedId),
+  );
+  const currentlyFixedInStock = [...currentlyStocked].filter((relatedId) =>
+    expectedRelatedIds.has(relatedId),
+  ).length;
+  return {
+    currentlyFixedInStock,
+    currentlyAdditionalInStock: currentlyStocked.size - currentlyFixedInStock,
+  };
+}
+
 async function summaryContext(env: Env, period: Period, productIds: readonly string[]) {
   const completed = await getCompletedDates(env.DATA_BUCKET, period);
   if (completed.length === 0) {
@@ -133,8 +181,24 @@ export async function summarizeMonopolies(
     wines.map(({ productNumber }) => productNumber),
   );
   const index = indexObservations(observations, "monopoly");
-  return monopolies.map((monopoly) => ({
-    ...monopoly,
-    availability: summarizeAvailability(entriesFor(index, monopoly.id), knownDates),
-  }));
+  const latestDate = knownDates.at(-1)!;
+  return monopolies.map((monopoly) => {
+    const entries = entriesFor(index, monopoly.id);
+    const expectedWineIds = new Set(
+      wines.filter((wine) => isWineRequiredAtStore(wine, monopoly)).map(({ id }) => id),
+    );
+    const currentStockByAssortment = countCurrentStockByAssortment(
+      entries,
+      latestDate,
+      expectedWineIds,
+    );
+    return {
+      ...monopoly,
+      availability: {
+        ...summarizeAvailability(entries, knownDates),
+        ...currentStockByAssortment,
+        currentlySoldOut: countExpectedSoldOut(entries, latestDate, expectedWineIds),
+      },
+    };
+  });
 }

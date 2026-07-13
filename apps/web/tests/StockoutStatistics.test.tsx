@@ -54,9 +54,9 @@ describe("StockoutStatistics", () => {
   it("explains pair counting and renders the complete daily breakdown", () => {
     render(<StockoutStatistics statistics={statistics} />);
 
-    expect(screen.getByText("wine-store stockouts")).toBeTruthy();
+    expect(screen.getByText("sold-out wine-store placements")).toBeTruthy();
     expect(screen.getByText(/One wine at five stores counts as five/)).toBeTruthy();
-    expect(screen.getByRole("img", { name: /Daily wine-store stockouts/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Daily sold-out wine-store placements/ })).toBeTruthy();
 
     const secondDay = screen.getByRole("row", {
       name: "12 Jul 2026 3 2 2 2 4 88",

@@ -82,6 +82,10 @@ export const MonopolyDetailPage = () => {
       }));
   }, [filter, period.from, period.to, request.data, soldOutOnly]);
 
+  const fixedAssortmentRows = rows.filter((row) => row.assortmentStatus === "required");
+  const additionalRows = rows.filter((row) => row.assortmentStatus === "additional");
+  const unknownRows = rows.filter((row) => row.assortmentStatus === "unknown");
+
   useEffect(() => {
     if (!request.data) {
       setHeaderContent(null);
@@ -115,22 +119,34 @@ export const MonopolyDetailPage = () => {
   if (!request.data) return null;
 
   const { monopoly } = request.data;
+  const detailedCategory = (monopoly.storeAssortment ?? monopoly.monopolyCategory)?.replace(
+    /^SB/i,
+    "",
+  );
   const freshness: Freshness = request.data;
   const latestDate = latestAvailableDate(
     request.data.period.from,
     request.data.period.to,
     request.data,
   );
-  const currentBottles = latestDate
-    ? request.data.wines.reduce(
-        (total, entry) => total + latestCount(entry.inventory, latestDate),
-        0,
-      )
-    : 0;
   const winesInStock = latestDate
     ? request.data.wines.filter((entry) => latestCount(entry.inventory, latestDate) > 0).length
     : 0;
-  const expectedSoldOut = latestDate
+  const fixedWinesInStock = latestDate
+    ? request.data.wines.filter(
+        (entry) =>
+          classifyWineForStore(entry.wine, monopoly).status === "required" &&
+          latestCount(entry.inventory, latestDate) > 0,
+      ).length
+    : 0;
+  const additionalWinesInStock = latestDate
+    ? request.data.wines.filter(
+        (entry) =>
+          classifyWineForStore(entry.wine, monopoly).status === "additional" &&
+          latestCount(entry.inventory, latestDate) > 0,
+      ).length
+    : 0;
+  const soldOutWines = latestDate
     ? request.data.wines.filter(
         (entry) =>
           classifyWineForStore(entry.wine, monopoly).status === "required" &&
@@ -141,29 +157,62 @@ export const MonopolyDetailPage = () => {
     <div className="flex w-full min-w-0 flex-col gap-7 sm:gap-9">
       <DetailHero
         title={monopoly.name}
-        metrics={[
-          {
-            label: "Portfolio bottles",
-            value: currentBottles.toLocaleString("en-GB"),
-            detail: latestDate ? `Current stock · ${formatDate(latestDate)}` : "No current data",
-          },
-          {
-            label: "Wines in stock",
-            value: winesInStock.toLocaleString("en-GB"),
-            detail: `of ${request.data.wines.length.toLocaleString("en-GB")} tracked wines`,
-          },
-          {
-            label: "Expected wines sold out",
-            value: expectedSoldOut.toLocaleString("en-GB"),
-            detail: "Current fixed-assortment gaps",
-          },
-        ]}
+        summary={
+          <div className="space-y-3 border-t border-border/75 pt-4">
+            <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+              {monopoly.postalCode || monopoly.city ? (
+                <p>
+                  <span className="text-muted-foreground">Location</span>{" "}
+                  <span className="font-medium">
+                    {[monopoly.postalCode, monopoly.city].filter(Boolean).join(" ")}
+                  </span>
+                </p>
+              ) : null}
+              {detailedCategory ? (
+                <p>
+                  <span className="text-muted-foreground">Category</span>{" "}
+                  <span className="font-medium">{detailedCategory}</span>
+                </p>
+              ) : null}
+            </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border/60 pt-3 sm:grid-cols-5">
+              {[
+                {
+                  label: "Fixed wines stocked",
+                  value: fixedWinesInStock.toLocaleString("en-GB"),
+                },
+                {
+                  label: "Additional wines stocked",
+                  value: additionalWinesInStock.toLocaleString("en-GB"),
+                },
+                {
+                  label: "Wines in stock",
+                  value: `${winesInStock.toLocaleString("en-GB")} / ${request.data.wines.length.toLocaleString("en-GB")}`,
+                },
+                {
+                  label: "Sold out",
+                  value: soldOutWines.toLocaleString("en-GB"),
+                },
+                ...(latestDate ? [{ label: "Updated", value: formatDate(latestDate) }] : []),
+              ].map((item) => (
+                <div className="min-w-0" key={item.label}>
+                  <dt className="flex min-h-8 items-end text-[0.68rem] leading-tight font-medium tracking-wide text-muted-foreground uppercase">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-1 text-base leading-none font-semibold text-foreground tabular-nums">
+                    {item.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        }
       />
 
       <EntityMoreInfo kind="monopoly" entityId={String(monopoly.id)} label={monopoly.name} />
 
       <section
-        className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
+        className="rounded-xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
         aria-label="Availability filters"
       >
         <div>
@@ -182,19 +231,19 @@ export const MonopolyDetailPage = () => {
           <Input
             id="wine-filter"
             type="search"
-            className="h-12 rounded-2xl border-border bg-background/65 pr-4 pl-11 shadow-none"
+            className="h-12 rounded-md border-border bg-background/65 pr-4 pl-11 shadow-none"
             placeholder="Search wines by name, product number or country"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <Label className="flex items-center gap-2 rounded-full border border-border/70 bg-background/55 px-3 py-2 font-normal">
+          <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/55 px-3 py-2 font-normal">
             <Checkbox
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
-            Expected products sold out at some point
+            Only sold-out fixed-assortment wines
           </Label>
           <span className="font-medium">{rows.length} wines shown</span>
         </div>
@@ -206,7 +255,7 @@ export const MonopolyDetailPage = () => {
       ) : null}
 
       <InventoryMatrix
-        rows={rows}
+        rows={fixedAssortmentRows}
         from={request.data.period.from}
         to={request.data.period.to}
         entityLabel="Wine"
@@ -214,18 +263,48 @@ export const MonopolyDetailPage = () => {
           filter
             ? "No matching wines"
             : soldOutOnly
-              ? "No expected products were sold out"
-              : "No wines were stocked here"
+              ? "No fixed-assortment wines were sold out"
+              : "No fixed-assortment wines were stocked here"
         }
         emptyDescription={
           filter
             ? "Clear the wine filter or try another product name."
             : soldOutOnly
-              ? "Products in this store's fixed assortment stayed in stock for the period."
-              : "Choose another period to look for earlier or later inventory."
+              ? "Every wine this store was expected to carry stayed in stock for the period."
+              : "Choose another period to look for earlier or later availability."
         }
         freshness={freshness}
+        title="Fixed-assortment availability"
+        description="Wines that belong to this store's fixed assortment. Newest dates appear first."
       />
+
+      {!soldOutOnly && additionalRows.length > 0 ? (
+        <InventoryMatrix
+          rows={additionalRows}
+          from={request.data.period.from}
+          to={request.data.period.to}
+          entityLabel="Wine"
+          emptyTitle="No wines outside the fixed assortment"
+          emptyDescription="No wines were found as optional local stock in the selected period."
+          freshness={freshness}
+          title="Not part of the fixed assortment"
+          description="Wines carried as optional local stock. A zero does not mean sold out."
+        />
+      ) : null}
+
+      {!soldOutOnly && unknownRows.length > 0 ? (
+        <InventoryMatrix
+          rows={unknownRows}
+          from={request.data.period.from}
+          to={request.data.period.to}
+          entityLabel="Wine"
+          emptyTitle="No unclassified wines"
+          emptyDescription="Every wine has enough assortment data to classify it for this store."
+          freshness={freshness}
+          title="Assortment not classified"
+          description="Wines missing the category data needed to infer whether they belong to this store's fixed assortment."
+        />
+      ) : null}
     </div>
   );
 };

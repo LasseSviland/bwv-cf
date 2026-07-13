@@ -25,7 +25,7 @@ export const HomePage = () => {
       <PageHeader
         eyebrow="Better Wines"
         title="Portfolio statistics"
-        description="A complete view of stockout pressure, affected wines, and availability across every tracked Vinmonopolet placement."
+        description="A complete view of sold-out pressure, affected wines, and availability across every tracked Vinmonopolet placement."
       />
 
       <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-5">

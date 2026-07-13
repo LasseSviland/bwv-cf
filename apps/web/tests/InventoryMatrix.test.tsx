@@ -140,10 +140,9 @@ describe("InventoryMatrix", () => {
       within(table).getByLabelText("11 Jul 2026: not currently stocked; additional product"),
     ).toBeTruthy();
     expect(within(table).queryByLabelText(/sold out/i)).toBeNull();
-    expect(
-      screen.getByText(
-        "Sold out means the product was expected as part of the store's fixed assortment. Additional products are optional local stock.",
-      ),
-    ).toBeTruthy();
+    expect(screen.queryByText("Sold out")).toBeNull();
+    expect(screen.queryByText("In stock · number is bottle count")).toBeNull();
+    expect(screen.queryByText("Data unavailable")).toBeNull();
+    expect(screen.getByText("Additional product · optional local stock")).toBeTruthy();
   });
 });
