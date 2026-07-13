@@ -59,7 +59,7 @@ describe("portfolio stockout statistics", () => {
     );
   });
 
-  it("counts daily pair stockouts, distinct wines and stores, transitions, and depleted bottles", () => {
+  it("counts only fixed-assortment stockouts and reports affected wines by date", () => {
     const result = calculateStockoutStatistics({
       knownDates: ["2026-07-10", "2026-07-11", "2026-07-12"],
       comparisonDate: "2026-07-09",
@@ -95,8 +95,8 @@ describe("portfolio stockout statistics", () => {
     expect(result.daily).toEqual([
       {
         date: "2026-07-10",
-        trackedPairs: 4,
-        inStockPairs: 4,
+        trackedPairs: 3,
+        inStockPairs: 3,
         soldOutPairs: 0,
         distinctWinesSoldOut: 0,
         distinctStoresAffected: 0,
@@ -106,8 +106,8 @@ describe("portfolio stockout statistics", () => {
       },
       {
         date: "2026-07-11",
-        trackedPairs: 4,
-        inStockPairs: 3,
+        trackedPairs: 3,
+        inStockPairs: 2,
         soldOutPairs: 1,
         distinctWinesSoldOut: 1,
         distinctStoresAffected: 1,
@@ -117,29 +117,89 @@ describe("portfolio stockout statistics", () => {
       },
       {
         date: "2026-07-12",
-        trackedPairs: 4,
+        trackedPairs: 3,
         inStockPairs: 2,
-        soldOutPairs: 2,
-        distinctWinesSoldOut: 2,
-        distinctStoresAffected: 2,
-        newlySoldOutPairs: 2,
-        bottlesLostToStockouts: 9,
+        soldOutPairs: 1,
+        distinctWinesSoldOut: 1,
+        distinctStoresAffected: 1,
+        newlySoldOutPairs: 1,
+        bottlesLostToStockouts: 3,
         totalBottles: 6,
+      },
+    ]);
+    expect(result.wines).toEqual([
+      {
+        wine: wines[0],
+        fixedStores: 2,
+        soldOutDays: 2,
+        storeDaysSoldOut: 2,
+        currentStoresSoldOut: 1,
+        availabilityRate: 2 / 3,
+        peak: { date: "2026-07-11", storesSoldOut: 1 },
+        soldOutDates: [
+          { date: "2026-07-11", storesSoldOut: 1 },
+          { date: "2026-07-12", storesSoldOut: 1 },
+        ],
       },
     ]);
     expect(result.summary).toEqual({
       observedDays: 3,
       daysWithStockouts: 2,
-      trackedPairs: 4,
-      stockoutPairDays: 3,
-      distinctPairsSoldOut: 3,
-      distinctWinesSoldOut: 2,
+      trackedPairs: 3,
+      stockoutPairDays: 2,
+      distinctPairsSoldOut: 2,
+      distinctWinesSoldOut: 1,
       distinctStoresAffected: 2,
-      newlySoldOutPairs: 3,
-      bottlesLostToStockouts: 10,
-      averageDailyStockouts: 1,
-      availabilityRate: 0.75,
-      peak: { date: "2026-07-12", soldOutPairs: 2 },
+      newlySoldOutPairs: 2,
+      bottlesLostToStockouts: 4,
+      averageDailyStockouts: 2 / 3,
+      availabilityRate: 7 / 9,
+      peak: { date: "2026-07-11", soldOutPairs: 1 },
     });
+  });
+
+  it("does not change a day's result when optional stock appears elsewhere in the period", () => {
+    const observations = [
+      { date: "2026-07-11", productId: "100", storeId: "20", count: 3 },
+      { date: "2026-07-11", productId: "200", storeId: "20", count: 4 },
+      { date: "2026-07-11", productId: "300", storeId: "10", count: 6 },
+      { date: "2026-07-12", productId: "100", storeId: "10", count: 2 },
+      { date: "2026-07-12", productId: "200", storeId: "20", count: 4 },
+    ];
+    const short = calculateStockoutStatistics({
+      knownDates: ["2026-07-12"],
+      comparisonDate: "2026-07-11",
+      wines,
+      monopolies,
+      observations,
+    });
+    const long = calculateStockoutStatistics({
+      knownDates: ["2026-07-11", "2026-07-12"],
+      comparisonDate: null,
+      wines,
+      monopolies,
+      observations,
+    });
+
+    expect(long.daily[1]).toEqual(short.daily[0]);
+    expect(short.daily[0]?.trackedPairs).toBe(3);
+  });
+
+  it("does not track a fixed placement before its assortment becomes valid", () => {
+    const result = calculateStockoutStatistics({
+      knownDates: ["2026-07-10", "2026-07-11"],
+      comparisonDate: null,
+      wines: [wines[0]!],
+      monopolies,
+      observations: [],
+      fixedAssortmentFromByWineId: new Map([[100, "2026-07-11"]]),
+    });
+
+    expect(
+      result.daily.map(({ trackedPairs, soldOutPairs }) => ({ trackedPairs, soldOutPairs })),
+    ).toEqual([
+      { trackedPairs: 0, soldOutPairs: 0 },
+      { trackedPairs: 2, soldOutPairs: 2 },
+    ]);
   });
 });

@@ -290,6 +290,36 @@ describe("entity and inventory schemas", () => {
           totalBottles: 88,
         },
       ],
+      wines: [
+        {
+          wine,
+          fixedStores: 10,
+          soldOutDays: 2,
+          storeDaysSoldOut: 3,
+          currentStoresSoldOut: 1,
+          availabilityRate: 0.85,
+          peak: { date: "2026-07-11", storesSoldOut: 2 },
+          soldOutDates: [
+            { date: "2026-07-11", storesSoldOut: 2 },
+            { date: "2026-07-12", storesSoldOut: 1 },
+          ],
+        },
+        {
+          wine: {
+            ...wine,
+            id: 18,
+            productNumber: "001235",
+            name: "Fjordglimt Spätburgunder",
+          },
+          fixedStores: 8,
+          soldOutDays: 1,
+          storeDaysSoldOut: 2,
+          currentStoresSoldOut: 2,
+          availabilityRate: 0.875,
+          peak: { date: "2026-07-12", storesSoldOut: 2 },
+          soldOutDates: [{ date: "2026-07-12", storesSoldOut: 2 }],
+        },
+      ],
       summary: {
         observedDays: 2,
         daysWithStockouts: 2,

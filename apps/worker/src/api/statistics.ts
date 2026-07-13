@@ -1,17 +1,26 @@
-import type {
-  DailyStockoutStatistics,
-  Freshness,
-  MonopolySummary,
-  Period,
-  StatisticsResponse,
-  StockoutSummary,
-  WineSummary,
+import {
+  DateStringSchema,
+  type DailyStockoutStatistics,
+  type Freshness,
+  type MonopolySummary,
+  type Period,
+  type StatisticsResponse,
+  type StockoutSummary,
+  type StockoutWineStatistics,
+  type WineSummary,
 } from "@bwv/contracts";
 import { monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
-import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
-import type { CompletedInventoryDate } from "../types";
+import {
+  activeWineSources,
+  getRawMonopolyCatalog,
+  getRawWineCatalog,
+  monopolySummaryFromSource,
+  wineSummaryFromSource,
+} from "../ingestion/catalogs";
+import { nestedString } from "../ingestion/vinmonopolet";
+import type { CompletedInventoryDate, JsonObject } from "../types";
 import type { InventoryObservation } from "./daily-inventory";
 import { getCompletedDates, visitDailyInventoryObservations } from "./daily-inventory";
 
@@ -23,6 +32,7 @@ interface ParsedGrade {
 interface TrackedPair {
   wineId: number;
   storeId: number;
+  activeFrom: string | null;
 }
 
 interface CalculateStatisticsInput {
@@ -31,19 +41,37 @@ interface CalculateStatisticsInput {
   wines: readonly WineSummary[];
   monopolies: readonly MonopolySummary[];
   observations: readonly InventoryObservation[];
+  fixedAssortmentFromByWineId?: ReadonlyMap<number, string>;
 }
 
 interface DailyIntermediate {
   date: string;
+  trackedPairs: number;
   inStockPairs: number;
-  positiveByWine: Map<number, number>;
-  positiveByStore: Map<number, number>;
+  soldOutPairKeys: Set<string>;
+  soldOutWineIds: Set<number>;
+  affectedStoreIds: Set<number>;
+  trackedStoresByWine: Map<number, number>;
+  soldOutStoresByWine: Map<number, number>;
   newlySoldOutPairs: number;
   bottlesLostToStockouts: number;
   totalBottles: number;
 }
 
 const pairKey = (wineId: number, storeId: number): string => `${wineId}:${storeId}`;
+
+function validSourceDate(value: string | null): string | null {
+  if (value === null) return null;
+  const parsed = DateStringSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function fixedAssortmentFromSource(wine: JsonObject): string | null {
+  return (
+    validSourceDate(nestedString(wine, "assortment", "validFrom")) ??
+    validSourceDate(nestedString(wine, "basic", "introductionDate"))
+  );
+}
 
 function parsedGrades(wine: WineSummary): ParsedGrade[] {
   const values =
@@ -109,10 +137,10 @@ function freshnessFor(period: Period, completed: readonly CompletedInventoryDate
 
 class StockoutStatisticsAccumulator {
   private readonly wineByProductNumber: ReadonlyMap<string, WineSummary>;
+  private readonly wineById: ReadonlyMap<number, WineSummary>;
   private readonly storeByNumber: ReadonlyMap<string, MonopolySummary>;
   private readonly knownDateSet: ReadonlySet<string>;
-  private readonly trackedPairs = new Map<string, TrackedPair>();
-  private readonly positiveDaysByPair = new Map<string, number>();
+  private readonly fixedPairs = new Map<string, TrackedPair>();
   private readonly intermediate: DailyIntermediate[] = [];
   private previousStock: Map<string, number> | null = null;
 
@@ -121,33 +149,47 @@ class StockoutStatisticsAccumulator {
     private readonly comparisonDate: string | null,
     wines: readonly WineSummary[],
     monopolies: readonly MonopolySummary[],
+    fixedAssortmentFromByWineId: ReadonlyMap<number, string> = new Map(),
   ) {
     const currentWines = wines.filter(
       (wine) => wine.outdatedAt === undefined || wine.outdatedAt === null,
     );
     this.wineByProductNumber = new Map(currentWines.map((wine) => [wine.productNumber, wine]));
+    this.wineById = new Map(currentWines.map((wine) => [wine.id, wine]));
     this.storeByNumber = new Map(monopolies.map((monopoly) => [monopoly.storeNumber, monopoly]));
     this.knownDateSet = new Set(knownDates);
     for (const wine of currentWines) {
       for (const monopoly of monopolies) {
         if (!isWineRequiredAtStore(wine, monopoly)) continue;
-        this.trackedPairs.set(pairKey(wine.id, monopoly.id), {
+        this.fixedPairs.set(pairKey(wine.id, monopoly.id), {
           wineId: wine.id,
           storeId: monopoly.id,
+          activeFrom: fixedAssortmentFromByWineId.get(wine.id) ?? null,
         });
       }
     }
   }
 
+  private pairIsActive(pair: TrackedPair, date: string): boolean {
+    return pair.activeFrom === null || pair.activeFrom <= date;
+  }
+
   addDate(date: string, observations: readonly InventoryObservation[]): void {
-    const currentStock = new Map<string, number>();
+    const allStock = new Map<string, number>();
+    let totalBottles = 0;
     for (const observation of observations) {
       const wine = this.wineByProductNumber.get(observation.productId);
       const monopoly = this.storeByNumber.get(observation.storeId);
       if (wine === undefined || monopoly === undefined) continue;
       const key = pairKey(wine.id, monopoly.id);
-      this.trackedPairs.set(key, { wineId: wine.id, storeId: monopoly.id });
-      currentStock.set(key, (currentStock.get(key) ?? 0) + observation.count);
+      allStock.set(key, (allStock.get(key) ?? 0) + observation.count);
+      totalBottles += observation.count;
+    }
+
+    const currentStock = new Map<string, number>();
+    for (const [key, count] of allStock) {
+      const pair = this.fixedPairs.get(key);
+      if (pair !== undefined && this.pairIsActive(pair, date)) currentStock.set(key, count);
     }
 
     if (date === this.comparisonDate) {
@@ -156,23 +198,29 @@ class StockoutStatisticsAccumulator {
     }
     if (!this.knownDateSet.has(date)) return;
 
-    const positiveByWine = new Map<number, number>();
-    const positiveByStore = new Map<number, number>();
-    let totalBottles = 0;
-    for (const [key, count] of currentStock) {
-      const pair = this.trackedPairs.get(key);
-      if (pair === undefined) continue;
-      positiveByWine.set(pair.wineId, (positiveByWine.get(pair.wineId) ?? 0) + 1);
-      positiveByStore.set(pair.storeId, (positiveByStore.get(pair.storeId) ?? 0) + 1);
-      this.positiveDaysByPair.set(key, (this.positiveDaysByPair.get(key) ?? 0) + 1);
-      totalBottles += count;
+    const soldOutPairKeys = new Set<string>();
+    const soldOutWineIds = new Set<number>();
+    const affectedStoreIds = new Set<number>();
+    const trackedStoresByWine = new Map<number, number>();
+    const soldOutStoresByWine = new Map<number, number>();
+    let trackedPairs = 0;
+    for (const [key, pair] of this.fixedPairs) {
+      if (!this.pairIsActive(pair, date)) continue;
+      trackedPairs += 1;
+      trackedStoresByWine.set(pair.wineId, (trackedStoresByWine.get(pair.wineId) ?? 0) + 1);
+      if (currentStock.has(key)) continue;
+      soldOutPairKeys.add(key);
+      soldOutWineIds.add(pair.wineId);
+      affectedStoreIds.add(pair.storeId);
+      soldOutStoresByWine.set(pair.wineId, (soldOutStoresByWine.get(pair.wineId) ?? 0) + 1);
     }
 
     let newlySoldOutPairs = 0;
     let bottlesLostToStockouts = 0;
     if (this.previousStock !== null) {
       for (const [key, previousCount] of this.previousStock) {
-        if (!currentStock.has(key)) {
+        const pair = this.fixedPairs.get(key);
+        if (pair !== undefined && this.pairIsActive(pair, date) && !currentStock.has(key)) {
           newlySoldOutPairs += 1;
           bottlesLostToStockouts += previousCount;
         }
@@ -180,9 +228,13 @@ class StockoutStatisticsAccumulator {
     }
     this.intermediate.push({
       date,
+      trackedPairs,
       inStockPairs: currentStock.size,
-      positiveByWine,
-      positiveByStore,
+      soldOutPairKeys,
+      soldOutWineIds,
+      affectedStoreIds,
+      trackedStoresByWine,
+      soldOutStoresByWine,
       newlySoldOutPairs,
       bottlesLostToStockouts,
       totalBottles,
@@ -190,39 +242,23 @@ class StockoutStatisticsAccumulator {
     this.previousStock = currentStock;
   }
 
-  finish(): Pick<StatisticsResponse, "comparisonDate" | "daily" | "summary"> {
-    const trackedByWine = new Map<number, number>();
-    const trackedByStore = new Map<number, number>();
-    for (const pair of this.trackedPairs.values()) {
-      trackedByWine.set(pair.wineId, (trackedByWine.get(pair.wineId) ?? 0) + 1);
-      trackedByStore.set(pair.storeId, (trackedByStore.get(pair.storeId) ?? 0) + 1);
-    }
-
-    const soldOutPairKeys = new Set(
-      [...this.trackedPairs.keys()].filter(
-        (key) => (this.positiveDaysByPair.get(key) ?? 0) < this.knownDates.length,
-      ),
-    );
+  finish(): Pick<StatisticsResponse, "comparisonDate" | "daily" | "wines" | "summary"> {
+    const soldOutPairKeys = new Set<string>();
     const soldOutWineIds = new Set<number>();
     const affectedStoreIds = new Set<number>();
-    for (const key of soldOutPairKeys) {
-      const pair = this.trackedPairs.get(key);
-      if (pair === undefined) continue;
-      soldOutWineIds.add(pair.wineId);
-      affectedStoreIds.add(pair.storeId);
+    for (const entry of this.intermediate) {
+      entry.soldOutPairKeys.forEach((key) => soldOutPairKeys.add(key));
+      entry.soldOutWineIds.forEach((wineId) => soldOutWineIds.add(wineId));
+      entry.affectedStoreIds.forEach((storeId) => affectedStoreIds.add(storeId));
     }
 
     const daily: DailyStockoutStatistics[] = this.intermediate.map((entry) => ({
       date: entry.date,
-      trackedPairs: this.trackedPairs.size,
+      trackedPairs: entry.trackedPairs,
       inStockPairs: entry.inStockPairs,
-      soldOutPairs: this.trackedPairs.size - entry.inStockPairs,
-      distinctWinesSoldOut: [...trackedByWine].filter(
-        ([wineId, tracked]) => (entry.positiveByWine.get(wineId) ?? 0) < tracked,
-      ).length,
-      distinctStoresAffected: [...trackedByStore].filter(
-        ([storeId, tracked]) => (entry.positiveByStore.get(storeId) ?? 0) < tracked,
-      ).length,
+      soldOutPairs: entry.soldOutPairKeys.size,
+      distinctWinesSoldOut: entry.soldOutWineIds.size,
+      distinctStoresAffected: entry.affectedStoreIds.size,
       newlySoldOutPairs: entry.newlySoldOutPairs,
       bottlesLostToStockouts: entry.bottlesLostToStockouts,
       totalBottles: entry.totalBottles,
@@ -230,16 +266,57 @@ class StockoutStatisticsAccumulator {
 
     const stockoutPairDays = daily.reduce((total, entry) => total + entry.soldOutPairs, 0);
     const inStockPairDays = daily.reduce((total, entry) => total + entry.inStockPairs, 0);
-    const trackedPairDays = this.trackedPairs.size * this.knownDates.length;
+    const trackedPairDays = daily.reduce((total, entry) => total + entry.trackedPairs, 0);
     const peak = daily.reduce<DailyStockoutStatistics | null>(
       (current, entry) =>
         current === null || entry.soldOutPairs > current.soldOutPairs ? entry : current,
       null,
     );
+    const latest = this.intermediate.at(-1);
+    const wines: StockoutWineStatistics[] = [...soldOutWineIds]
+      .flatMap((wineId) => {
+        const wine = this.wineById.get(wineId);
+        if (wine === undefined) return [];
+        const soldOutDates = this.intermediate.flatMap((entry) => {
+          const storesSoldOut = entry.soldOutStoresByWine.get(wineId) ?? 0;
+          return storesSoldOut > 0 ? [{ date: entry.date, storesSoldOut }] : [];
+        });
+        const storeDaysSoldOut = soldOutDates.reduce(
+          (total, entry) => total + entry.storesSoldOut,
+          0,
+        );
+        const trackedStoreDays = this.intermediate.reduce(
+          (total, entry) => total + (entry.trackedStoresByWine.get(wineId) ?? 0),
+          0,
+        );
+        const winePeak = soldOutDates.reduce<(typeof soldOutDates)[number]>(
+          (current, entry) => (entry.storesSoldOut > current.storesSoldOut ? entry : current),
+          soldOutDates[0]!,
+        );
+        return [
+          {
+            wine,
+            fixedStores: latest?.trackedStoresByWine.get(wineId) ?? 0,
+            soldOutDays: soldOutDates.length,
+            storeDaysSoldOut,
+            currentStoresSoldOut: latest?.soldOutStoresByWine.get(wineId) ?? 0,
+            availabilityRate:
+              trackedStoreDays === 0 ? 0 : (trackedStoreDays - storeDaysSoldOut) / trackedStoreDays,
+            peak: winePeak,
+            soldOutDates,
+          },
+        ];
+      })
+      .sort(
+        (left, right) =>
+          right.storeDaysSoldOut - left.storeDaysSoldOut ||
+          right.currentStoresSoldOut - left.currentStoresSoldOut ||
+          left.wine.name.localeCompare(right.wine.name, "nb-NO"),
+      );
     const summary: StockoutSummary = {
       observedDays: this.knownDates.length,
       daysWithStockouts: daily.filter(({ soldOutPairs }) => soldOutPairs > 0).length,
-      trackedPairs: this.trackedPairs.size,
+      trackedPairs: daily.at(-1)?.trackedPairs ?? 0,
       stockoutPairDays,
       distinctPairsSoldOut: soldOutPairKeys.size,
       distinctWinesSoldOut: soldOutWineIds.size,
@@ -254,7 +331,7 @@ class StockoutStatisticsAccumulator {
       availabilityRate: trackedPairDays === 0 ? 0 : inStockPairDays / trackedPairDays,
       peak: peak === null ? null : { date: peak.date, soldOutPairs: peak.soldOutPairs },
     };
-    return { comparisonDate: this.comparisonDate, daily, summary };
+    return { comparisonDate: this.comparisonDate, daily, wines, summary };
   }
 }
 
@@ -264,12 +341,17 @@ export function calculateStockoutStatistics({
   wines,
   monopolies,
   observations,
-}: CalculateStatisticsInput): Pick<StatisticsResponse, "comparisonDate" | "daily" | "summary"> {
+  fixedAssortmentFromByWineId,
+}: CalculateStatisticsInput): Pick<
+  StatisticsResponse,
+  "comparisonDate" | "daily" | "wines" | "summary"
+> {
   const accumulator = new StockoutStatisticsAccumulator(
     knownDates,
     comparisonDate,
     wines,
     monopolies,
+    fixedAssortmentFromByWineId,
   );
   const observationsByDate = new Map<string, InventoryObservation[]>(
     [...(comparisonDate === null ? [] : [comparisonDate]), ...knownDates].map((date) => [date, []]),
@@ -290,11 +372,21 @@ export async function getStatistics(
   etagSeed: string;
   response: StatisticsResponse;
 }> {
-  const [wines, monopolies, allCompleted] = await Promise.all([
-    getWineCatalog(env),
-    getMonopolyCatalog(env),
+  const [wineFile, monopolyFile, allCompleted] = await Promise.all([
+    getRawWineCatalog(env),
+    getRawMonopolyCatalog(env),
     getCompletedDates(env.DATA_BUCKET),
   ]);
+  const wineSources = activeWineSources(wineFile);
+  const wines = wineSources.map((wine) => wineSummaryFromSource(wine));
+  const monopolies = monopolyFile.monopolies.map(monopolySummaryFromSource);
+  const fixedAssortmentFromByWineId = new Map(
+    wineSources.flatMap((source, index) => {
+      const activeFrom = fixedAssortmentFromSource(source);
+      if (activeFrom === null) return [];
+      return [[wines[index]!.id, activeFrom] as const];
+    }),
+  );
   const completed = allCompleted.filter(({ date }) => date >= period.from && date <= period.to);
   if (completed.length === 0) {
     throw new HttpError(503, "dataset_unavailable", "No requested inventory date is available");
@@ -307,6 +399,7 @@ export async function getStatistics(
     comparison?.date ?? null,
     wines,
     monopolies,
+    fixedAssortmentFromByWineId,
   );
   await visitDailyInventoryObservations(
     env.DATA_BUCKET,
@@ -322,7 +415,7 @@ export async function getStatistics(
   };
   return {
     response,
-    etagSeed: `statistics:${period.from}:${period.to}:${[
+    etagSeed: `statistics:${period.from}:${period.to}:${wineFile.syncedAt}:${monopolyFile.syncedAt}:${[
       ...(comparison === null ? [] : [comparison]),
       ...completed,
     ]

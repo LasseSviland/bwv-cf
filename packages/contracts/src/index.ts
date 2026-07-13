@@ -297,6 +297,59 @@ export const DailyStockoutStatisticsSchema = z
   );
 export type DailyStockoutStatistics = z.infer<typeof DailyStockoutStatisticsSchema>;
 
+export const StockoutWineDateSchema = z
+  .object({
+    date: DateStringSchema,
+    storesSoldOut: z.number().int().safe().positive(),
+  })
+  .strict();
+export type StockoutWineDate = z.infer<typeof StockoutWineDateSchema>;
+
+export const StockoutWineStatisticsSchema = z
+  .object({
+    wine: WineSummarySchema,
+    fixedStores: z.number().int().safe().nonnegative(),
+    soldOutDays: z.number().int().safe().nonnegative(),
+    storeDaysSoldOut: z.number().int().safe().nonnegative(),
+    currentStoresSoldOut: z.number().int().safe().nonnegative(),
+    availabilityRate: z.number().finite().min(0).max(1),
+    peak: z
+      .object({
+        date: DateStringSchema,
+        storesSoldOut: z.number().int().safe().positive(),
+      })
+      .strict(),
+    soldOutDates: z.array(StockoutWineDateSchema),
+  })
+  .strict()
+  .superRefine((statistics, context) => {
+    if (statistics.soldOutDays !== statistics.soldOutDates.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Sold-out days must match the number of sold-out dates",
+        path: ["soldOutDays"],
+      });
+    }
+    if (
+      statistics.storeDaysSoldOut !==
+      statistics.soldOutDates.reduce((total, entry) => total + entry.storesSoldOut, 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Store-days sold out must match the sold-out date totals",
+        path: ["storeDaysSoldOut"],
+      });
+    }
+    if (statistics.currentStoresSoldOut > statistics.fixedStores) {
+      context.addIssue({
+        code: "custom",
+        message: "Current sold-out stores cannot exceed fixed stores",
+        path: ["currentStoresSoldOut"],
+      });
+    }
+  });
+export type StockoutWineStatistics = z.infer<typeof StockoutWineStatisticsSchema>;
+
 export const StockoutSummarySchema = z
   .object({
     observedDays: z.number().int().safe().nonnegative(),
@@ -329,6 +382,7 @@ export const StatisticsResponseSchema = FreshnessSchema.extend({
   period: PeriodSchema,
   comparisonDate: DateStringSchema.nullable(),
   daily: z.array(DailyStockoutStatisticsSchema),
+  wines: z.array(StockoutWineStatisticsSchema),
   summary: StockoutSummarySchema,
 })
   .strict()
@@ -356,6 +410,42 @@ export const StatisticsResponseSchema = FreshnessSchema.extend({
         code: "custom",
         message: "Observed days must match the daily statistics length",
         path: ["summary", "observedDays"],
+      });
+    }
+    const wineIds = new Set<number>();
+    response.wines.forEach((wine, wineIndex) => {
+      if (wineIds.has(wine.wine.id)) {
+        context.addIssue({
+          code: "custom",
+          message: "A wine may appear only once in statistics",
+          path: ["wines", wineIndex, "wine", "id"],
+        });
+      }
+      wineIds.add(wine.wine.id);
+      let previousSoldOutDate: string | undefined;
+      wine.soldOutDates.forEach((entry, dateIndex) => {
+        if (entry.date < response.period.from || entry.date > response.period.to) {
+          context.addIssue({
+            code: "custom",
+            message: "Wine stockout date falls outside the response period",
+            path: ["wines", wineIndex, "soldOutDates", dateIndex, "date"],
+          });
+        }
+        if (previousSoldOutDate !== undefined && entry.date <= previousSoldOutDate) {
+          context.addIssue({
+            code: "custom",
+            message: "Wine stockout dates must be unique and sorted in ascending order",
+            path: ["wines", wineIndex, "soldOutDates", dateIndex, "date"],
+          });
+        }
+        previousSoldOutDate = entry.date;
+      });
+    });
+    if (response.summary.distinctWinesSoldOut !== response.wines.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Distinct wines sold out must match the wine statistics length",
+        path: ["summary", "distinctWinesSoldOut"],
       });
     }
   });

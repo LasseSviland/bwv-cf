@@ -74,6 +74,24 @@ describe("API contract validation", () => {
           totalBottles: 82,
         },
       ],
+      wines: [
+        {
+          wine: {
+            id: 17,
+            productNumber: "001234",
+            name: "Fjordglimt Riesling",
+            assortment: "Basisutvalget",
+            assortmentGrades: ["SB6L"],
+          },
+          fixedStores: 10,
+          soldOutDays: 1,
+          storeDaysSoldOut: 2,
+          currentStoresSoldOut: 2,
+          availabilityRate: 0.8,
+          peak: { date: "2026-07-12", storesSoldOut: 2 },
+          soldOutDates: [{ date: "2026-07-12", storesSoldOut: 2 }],
+        },
+      ],
       summary: {
         observedDays: 1,
         daysWithStockouts: 1,

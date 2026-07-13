@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import type { StatisticsResponse } from "../src/api/types";
 import { StockoutStatistics } from "../src/components/StockoutStatistics";
@@ -34,6 +35,43 @@ const statistics: StatisticsResponse = {
       totalBottles: 88,
     },
   ],
+  wines: [
+    {
+      wine: {
+        id: 100,
+        productNumber: "100",
+        name: "Estate Red",
+        assortment: "Basisutvalget",
+        assortmentGrades: ["SB1R"],
+      },
+      fixedStores: 10,
+      soldOutDays: 2,
+      storeDaysSoldOut: 4,
+      currentStoresSoldOut: 2,
+      availabilityRate: 0.8,
+      peak: { date: "2026-07-11", storesSoldOut: 2 },
+      soldOutDates: [
+        { date: "2026-07-11", storesSoldOut: 2 },
+        { date: "2026-07-12", storesSoldOut: 2 },
+      ],
+    },
+    {
+      wine: {
+        id: 200,
+        productNumber: "200",
+        name: "Reserve Red",
+        assortment: "Basisutvalget",
+        assortmentGrades: ["SB2R"],
+      },
+      fixedStores: 10,
+      soldOutDays: 1,
+      storeDaysSoldOut: 1,
+      currentStoresSoldOut: 1,
+      availabilityRate: 0.95,
+      peak: { date: "2026-07-12", storesSoldOut: 1 },
+      soldOutDates: [{ date: "2026-07-12", storesSoldOut: 1 }],
+    },
+  ],
   summary: {
     observedDays: 2,
     daysWithStockouts: 2,
@@ -51,17 +89,26 @@ const statistics: StatisticsResponse = {
 };
 
 describe("StockoutStatistics", () => {
-  it("explains pair counting and renders the complete daily breakdown", () => {
-    render(<StockoutStatistics statistics={statistics} />);
+  it("shows fixed-assortment metrics, multiple daily charts, wines, and exact dates", () => {
+    render(
+      <MemoryRouter>
+        <StockoutStatistics statistics={statistics} />
+      </MemoryRouter>,
+    );
 
-    expect(screen.getByText("sold-out wine-store placements")).toBeTruthy();
-    expect(screen.getByText(/One wine at five stores counts as five/)).toBeTruthy();
-    expect(screen.getByRole("img", { name: /Daily sold-out wine-store placements/ })).toBeTruthy();
+    expect(screen.getByText("fixed placements sold out")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /^Sold-out fixed placements by day/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /^Wines affected by day/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /^Stores affected by day/ })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /^New stockouts by day/ })).toBeTruthy();
 
-    const secondDay = screen.getByRole("row", {
-      name: "12 Jul 2026 3 2 2 2 4 88",
-    });
-    expect(within(secondDay).getByText("3")).toBeTruthy();
-    expect(screen.getByText(/not a confirmed sales measure/)).toBeTruthy();
+    const wineLink = screen.getByRole("link", { name: /Estate Red/ });
+    expect(wineLink.getAttribute("href")).toBe("/wines/100?from=2026-07-11&to=2026-07-12");
+    expect(screen.getByText("4 sold-out store-days · 2 dates")).toBeTruthy();
+    expect(screen.getAllByText("12 Jul 2026").length).toBeGreaterThan(0);
+
+    const latestDay = screen.getByRole("row", { name: "12 Jul 2026 3 85% 2 2 2" });
+    expect(within(latestDay).getByText("3")).toBeTruthy();
+    expect(screen.getByText(/Optional local stock is excluded/)).toBeTruthy();
   });
 });

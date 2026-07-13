@@ -1,14 +1,20 @@
-import { Activity, CalendarOff, MapPin, MoveRight, PackageMinus, Store, Wine } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import type { DailyStockoutStatistics, StatisticsResponse } from "../api/types";
+import { Link } from "react-router-dom";
+import type {
+  DailyStockoutStatistics,
+  StatisticsResponse,
+  StockoutWineStatistics,
+} from "../api/types";
 import { cn } from "../lib/utils";
 import { formatDate } from "../utils/dates";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 interface StockoutStatisticsProps {
   statistics: StatisticsResponse;
 }
+
+type DailyValue = (entry: DailyStockoutStatistics) => number;
 
 const number = (value: number, maximumFractionDigits = 0): string =>
   value.toLocaleString("en-GB", { maximumFractionDigits });
@@ -36,8 +42,7 @@ const compactChartQuery = (): MediaQueryList | null =>
     ? (window.matchMedia("(max-width: 639px)") ?? null)
     : null;
 
-const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => {
-  const gradientId = `stockout-fill-${useId().replaceAll(":", "")}`;
+const useCompactChart = () => {
   const [compact, setCompact] = useState(() => compactChartQuery()?.matches ?? false);
   useEffect(() => {
     const query = compactChartQuery();
@@ -46,53 +51,72 @@ const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => 
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  const width = compact ? 360 : 920;
-  const height = compact ? 220 : 280;
+  return compact;
+};
+
+const DailyChart = ({
+  daily,
+  value,
+  label,
+  color,
+  mode,
+  wide = false,
+}: {
+  daily: DailyStockoutStatistics[];
+  value: DailyValue;
+  label: string;
+  color: string;
+  mode: "line" | "bars";
+  wide?: boolean;
+}) => {
+  const chartId = `daily-chart-${useId().replaceAll(":", "")}`;
+  const compact = useCompactChart();
+  const width = compact ? 360 : wide ? 920 : 560;
+  const height = compact ? 210 : wide ? 270 : 230;
   const padding = compact
-    ? { top: 24, right: 12, bottom: 34, left: 40 }
-    : { top: 26, right: 24, bottom: 40, left: 58 };
-  const chartFontSize = compact ? 11 : 12;
+    ? { top: 18, right: 12, bottom: 34, left: 38 }
+    : { top: 20, right: 18, bottom: 38, left: 48 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
-  const maximum = Math.max(1, ...daily.map(({ soldOutPairs }) => soldOutPairs));
+  const values = daily.map(value);
+  const actualMaximum = Math.max(0, ...values);
+  const maximum = Math.max(1, actualMaximum);
   const points = daily.map((entry, index) => ({
     x:
       daily.length === 1
         ? padding.left + plotWidth / 2
         : padding.left + (index / (daily.length - 1)) * plotWidth,
-    y: padding.top + plotHeight - (entry.soldOutPairs / maximum) * plotHeight,
+    y: padding.top + plotHeight - (value(entry) / maximum) * plotHeight,
     entry,
+    value: value(entry),
   }));
   const yTicks = [0, Math.round(maximum / 2), maximum].filter(
-    (value, index, values) => values.indexOf(value) === index,
+    (tick, index, all) => all.indexOf(tick) === index,
   );
-  const peak = points.reduce<(typeof points)[number] | null>(
-    (current, point) =>
-      current === null || point.entry.soldOutPairs > current.entry.soldOutPairs ? point : current,
-    null,
-  );
+  const barStep = daily.length === 0 ? plotWidth : plotWidth / daily.length;
+  const barWidth = Math.max(1, Math.min(18, barStep * 0.68));
 
   return (
     <svg
       className="block h-auto w-full overflow-visible"
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-labelledby={`${gradientId}-title ${gradientId}-description`}
+      aria-labelledby={`${chartId}-title ${chartId}-description`}
     >
-      <title id={`${gradientId}-title`}>Daily sold-out wine-store placements</title>
-      <desc id={`${gradientId}-description`}>
+      <title id={`${chartId}-title`}>{label} by day</title>
+      <desc id={`${chartId}-description`}>
         {daily.length === 0
-          ? "No covered inventory dates in the selected period."
-          : `${daily.length} covered days. Sold-out placements range from ${Math.min(
-              ...daily.map(({ soldOutPairs }) => soldOutPairs),
-            )} to ${maximum} wine-store pairs per day.`}
+          ? "No covered dates."
+          : `${daily.length} covered days. ${label} ranged from ${number(Math.min(...values))} to ${number(actualMaximum)}.`}
       </desc>
-      <defs>
-        <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="var(--chart-3)" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="var(--chart-3)" stopOpacity="0.01" />
-        </linearGradient>
-      </defs>
+      {mode === "line" ? (
+        <defs>
+          <linearGradient id={`${chartId}-fill`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+      ) : null}
       {yTicks.map((tick) => {
         const y = padding.top + plotHeight - (tick / maximum) * plotHeight;
         return (
@@ -103,13 +127,12 @@ const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => 
               y1={y}
               y2={y}
               stroke="var(--border)"
-              strokeWidth="1"
             />
             <text
-              x={padding.left - 12}
+              x={padding.left - 9}
               y={y + 4}
               fill="var(--muted-foreground)"
-              fontSize={chartFontSize}
+              fontSize={compact ? 10 : 11}
               textAnchor="end"
             >
               {number(tick)}
@@ -117,66 +140,63 @@ const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => 
           </g>
         );
       })}
-      {points.length > 0 ? (
+      {mode === "line" && points.length > 0 ? (
         <>
-          <path d={areaPath(points, padding.top + plotHeight)} fill={`url(#${gradientId})`} />
+          <path d={areaPath(points, padding.top + plotHeight)} fill={`url(#${chartId}-fill)`} />
           <path
             d={linePath(points)}
             fill="none"
-            stroke="var(--chart-3)"
+            stroke={color}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeWidth="3"
           />
+          {daily.length <= 45
+            ? points.map((point) => (
+                <circle
+                  key={point.entry.date}
+                  cx={point.x}
+                  cy={point.y}
+                  r="3"
+                  fill="var(--background)"
+                  stroke={color}
+                  strokeWidth="2"
+                >
+                  <title>{`${formatDate(point.entry.date)}: ${number(point.value)}`}</title>
+                </circle>
+              ))
+            : null}
         </>
       ) : null}
-      {daily.length <= 45
-        ? points.map(({ x, y, entry }) => (
-            <circle
-              key={entry.date}
-              cx={x}
-              cy={y}
-              r="3"
-              fill="var(--card)"
-              stroke="var(--chart-3)"
-              strokeWidth="2"
-            />
-          ))
+      {mode === "bars"
+        ? points.map((point, index) => {
+            const heightValue = (point.value / maximum) * plotHeight;
+            const x = padding.left + index * barStep + (barStep - barWidth) / 2;
+            return (
+              <rect
+                key={point.entry.date}
+                x={x}
+                y={padding.top + plotHeight - heightValue}
+                width={barWidth}
+                height={Math.max(point.value > 0 ? 2 : 0, heightValue)}
+                rx={Math.min(3, barWidth / 3)}
+                fill={color}
+                opacity="0.86"
+              >
+                <title>{`${formatDate(point.entry.date)}: ${number(point.value)}`}</title>
+              </rect>
+            );
+          })
         : null}
-      {peak && peak.entry.soldOutPairs > 0 ? (
-        <g>
-          <circle
-            cx={peak.x}
-            cy={peak.y}
-            r="5"
-            fill="var(--chart-3)"
-            stroke="var(--card)"
-            strokeWidth="3"
-          />
-          <text
-            x={Math.min(
-              Math.max(peak.x, padding.left + (compact ? 34 : 50)),
-              width - padding.right - (compact ? 34 : 50),
-            )}
-            y={Math.max(peak.y - 13, 15)}
-            fill="var(--foreground)"
-            fontSize={chartFontSize}
-            fontWeight="600"
-            textAnchor="middle"
-          >
-            Peak {number(peak.entry.soldOutPairs)}
-          </text>
-        </g>
-      ) : null}
       {tickIndexes(daily.length).map((index) => {
         const point = points[index];
         return point ? (
           <text
             key={point.entry.date}
             x={point.x}
-            y={height - 12}
+            y={height - 10}
             fill="var(--muted-foreground)"
-            fontSize={chartFontSize}
+            fontSize={compact ? 10 : 11}
             textAnchor={index === 0 ? "start" : index === daily.length - 1 ? "end" : "middle"}
           >
             {formatDate(point.entry.date, { day: "numeric", month: "short", year: false })}
@@ -187,248 +207,276 @@ const StockoutTrendChart = ({ daily }: { daily: DailyStockoutStatistics[] }) => 
   );
 };
 
-const PrimaryMetric = ({
-  icon: Icon,
-  value,
-  label,
-  detail,
-  featured = false,
-}: {
-  icon: typeof Wine;
-  value: string;
-  label: string;
-  detail: string;
-  featured?: boolean;
-}) => (
-  <Card
-    className={cn(
-      "rounded-3xl border-0 py-0 shadow-[0_22px_60px_rgb(31_45_37/7%)] ring-1 ring-foreground/8",
-      featured &&
-        "bg-primary text-primary-foreground shadow-[0_28px_75px_rgb(31_45_37/20%)] ring-0",
-    )}
-  >
-    <CardHeader className="px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
-      <span
-        className={cn(
-          "mb-5 grid size-10 place-items-center rounded-2xl bg-secondary text-primary",
-          featured && "bg-white/10 text-primary-foreground ring-1 ring-white/10",
-        )}
-      >
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
-      <CardTitle className="text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-        {value}
-      </CardTitle>
-      <CardDescription
-        className={cn("mt-1 font-medium text-foreground", featured && "text-primary-foreground")}
-      >
-        {label}
-      </CardDescription>
-      <p
-        className={cn(
-          "pt-1 text-xs leading-relaxed text-muted-foreground",
-          featured && "text-primary-foreground/65",
-        )}
-      >
-        {detail}
-      </p>
-    </CardHeader>
-  </Card>
+const Metric = ({ value, label }: { value: string; label: string }) => (
+  <div className="min-w-0 bg-background px-4 py-5 sm:px-5 sm:py-6">
+    <strong className="block text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
+      {value}
+    </strong>
+    <span className="mt-1 block text-xs leading-5 text-muted-foreground sm:text-sm">{label}</span>
+  </div>
 );
 
-export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
-  const { daily, summary } = statistics;
-
+const ChartSection = ({
+  title,
+  daily,
+  value,
+  color,
+  mode,
+  wide,
+}: {
+  title: string;
+  daily: DailyStockoutStatistics[];
+  value: DailyValue;
+  color: string;
+  mode: "line" | "bars";
+  wide?: boolean;
+}) => {
+  const values = daily.map(value);
+  const latest = values.at(-1) ?? 0;
+  const peak = Math.max(0, ...values);
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[0.68rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-            Selected period
-          </p>
-          <p className="mt-1 font-serif text-xl tracking-[-0.02em] text-foreground">
-            Portfolio inventory health
-          </p>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {formatDate(statistics.period.from)} – {formatDate(statistics.period.to)} ·{" "}
-          {number(summary.observedDays)} covered days
+    <section className="min-w-0 border-t border-border pt-5 sm:pt-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="text-sm font-semibold tracking-[-0.01em]">{title}</h2>
+        <p className="shrink-0 text-xs text-muted-foreground">
+          <strong className="font-semibold text-foreground">{number(latest)}</strong> latest ·{" "}
+          {number(peak)} peak
         </p>
       </div>
+      <div className="mt-3">
+        <DailyChart
+          daily={daily}
+          value={value}
+          label={title}
+          color={color}
+          mode={mode}
+          wide={wide}
+        />
+      </div>
+    </section>
+  );
+};
 
-      <section className="grid gap-4 md:grid-cols-3" aria-label="Selected period sold-out summary">
-        <PrimaryMetric
-          icon={PackageMinus}
-          value={number(summary.distinctPairsSoldOut)}
-          label="sold-out wine-store placements"
-          detail="Distinct placements that reached zero. One wine at five stores counts as five."
-          featured
-        />
-        <PrimaryMetric
-          icon={Wine}
-          value={number(summary.distinctWinesSoldOut)}
-          label="distinct wines affected"
-          detail={`${number(summary.distinctStoresAffected)} stores had at least one tracked wine out of stock.`}
-        />
-        <PrimaryMetric
-          icon={CalendarOff}
-          value={`${number(summary.daysWithStockouts)} / ${number(summary.observedDays)}`}
-          label="days with sold-out stores"
-          detail={`${number(summary.stockoutPairDays)} total sold-out wine-store days in the period.`}
-        />
-      </section>
-
-      <section className="grid gap-px overflow-hidden rounded-3xl bg-border/70 ring-1 ring-border/70 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          {
-            icon: Activity,
-            label: "New sold-out placements",
-            value: number(summary.newlySoldOutPairs),
-            detail: "transitions from positive stock to zero",
-          },
-          {
-            icon: PackageMinus,
-            label: "Bottles depleted",
-            value: number(summary.bottlesLostToStockouts),
-            detail: "last observed bottles before those transitions",
-          },
-          {
-            icon: MapPin,
-            label: "Average per day",
-            value: number(summary.averageDailyStockouts, 1),
-            detail: "wine-store pairs at zero stock",
-          },
-          {
-            icon: Store,
-            label: "Placement availability",
-            value: percentage(summary.availabilityRate),
-            detail: `across ${number(summary.trackedPairs)} tracked placements`,
-          },
-        ].map(({ icon: Icon, label, value, detail }) => (
-          <div key={label} className="bg-card px-5 py-5 sm:px-6">
-            <div className="mb-4 flex items-center gap-2 text-muted-foreground">
-              <Icon className="size-4" aria-hidden="true" />
-              <span className="text-[0.68rem] font-semibold tracking-[0.11em] uppercase">
-                {label}
+const SoldOutWine = ({
+  statistics,
+  maximumStoreDays,
+  period,
+}: {
+  statistics: StockoutWineStatistics;
+  maximumStoreDays: number;
+  period: StatisticsResponse["period"];
+}) => {
+  const barWidth =
+    maximumStoreDays === 0 ? 0 : (statistics.storeDaysSoldOut / maximumStoreDays) * 100;
+  return (
+    <article className="py-5 first:pt-0 last:pb-0">
+      <div className="grid gap-4 lg:grid-cols-[minmax(15rem,1fr)_auto] lg:items-start">
+        <div className="min-w-0">
+          <Link
+            to={`/wines/${statistics.wine.id}?from=${period.from}&to=${period.to}`}
+            className="inline-flex max-w-full items-center gap-1.5 font-semibold text-foreground hover:text-primary"
+          >
+            <span className="truncate">{statistics.wine.name}</span>
+            <ArrowUpRight className="size-3.5 shrink-0" aria-hidden="true" />
+          </Link>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+            <span
+              className="block h-full rounded-full bg-chart-3"
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
+        </div>
+        <dl className="grid grid-cols-3 gap-x-5 text-right text-xs sm:gap-x-8">
+          <div>
+            <dt className="text-muted-foreground">Latest</dt>
+            <dd className="mt-0.5 font-semibold">
+              {number(statistics.currentStoresSoldOut)} / {number(statistics.fixedStores)} stores
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Days</dt>
+            <dd className="mt-0.5 font-semibold">{number(statistics.soldOutDays)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Availability</dt>
+            <dd className="mt-0.5 font-semibold">{percentage(statistics.availabilityRate)}</dd>
+          </div>
+        </dl>
+      </div>
+      <details className="group mt-3 text-sm">
+        <summary className="w-fit cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+          {number(statistics.storeDaysSoldOut)} sold-out store-day
+          {statistics.storeDaysSoldOut === 1 ? "" : "s"} · {number(statistics.soldOutDays)} date
+          {statistics.soldOutDays === 1 ? "" : "s"}
+        </summary>
+        <div className="mt-3 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {statistics.soldOutDates.map((entry) => (
+            <div
+              key={entry.date}
+              className="flex items-center justify-between gap-3 bg-card px-3 py-2"
+            >
+              <time dateTime={entry.date} className="text-xs font-medium">
+                {formatDate(entry.date)}
+              </time>
+              <span className="text-xs text-muted-foreground">
+                {number(entry.storesSoldOut)} store{entry.storesSoldOut === 1 ? "" : "s"}
               </span>
             </div>
-            <strong className="block text-2xl font-semibold tracking-[-0.03em]">{value}</strong>
-            <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-              {detail}
-            </span>
-          </div>
-        ))}
+          ))}
+        </div>
+      </details>
+    </article>
+  );
+};
+
+export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
+  const { daily, summary, wines } = statistics;
+  const latest = daily.at(-1);
+  const latestAvailability =
+    latest === undefined || latest.trackedPairs === 0
+      ? 0
+      : latest.inStockPairs / latest.trackedPairs;
+  const maximumStoreDays = Math.max(0, ...wines.map(({ storeDaysSoldOut }) => storeDaysSoldOut));
+
+  return (
+    <div className="space-y-8 sm:space-y-10">
+      <section aria-label="Latest fixed-assortment availability">
+        <p className="mb-3 text-sm text-muted-foreground">
+          {latest ? formatDate(latest.date) : "No covered date"} · {number(summary.observedDays)}{" "}
+          covered day{summary.observedDays === 1 ? "" : "s"}
+        </p>
+        <div className="grid gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+          <Metric value={number(latest?.soldOutPairs ?? 0)} label="fixed placements sold out" />
+          <Metric value={number(latest?.distinctWinesSoldOut ?? 0)} label="wines affected" />
+          <Metric value={number(latest?.distinctStoresAffected ?? 0)} label="stores affected" />
+          <Metric value={percentage(latestAvailability)} label="fixed-placement availability" />
+        </div>
+        <dl className="grid gap-x-6 gap-y-3 border-b border-border py-4 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            [number(summary.distinctPairsSoldOut), "distinct placements affected"],
+            [number(summary.stockoutPairDays), "sold-out placement-days"],
+            [number(summary.newlySoldOutPairs), "new stockouts"],
+            [
+              `${number(summary.daysWithStockouts)} / ${number(summary.observedDays)}`,
+              "days with stockouts",
+            ],
+          ].map(([value, label]) => (
+            <div
+              key={label}
+              className="flex items-baseline justify-between gap-3 sm:flex-col-reverse sm:items-start sm:gap-0"
+            >
+              <dt className="text-muted-foreground sm:mt-1 sm:after:hidden">{label}</dt>
+              <dd className="font-semibold sm:text-base">{value}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
-      <Card className="rounded-3xl border-0 py-0 shadow-[0_22px_70px_rgb(31_45_37/6%)] ring-1 ring-foreground/8">
-        <CardHeader className="flex flex-col gap-4 border-b border-border/60 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-7 sm:py-6">
-          <div>
-            <CardTitle className="font-serif text-2xl font-normal tracking-[-0.025em] sm:text-3xl">
-              Daily sold-out pressure
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Number of tracked wine-store placements with zero bottles on each covered date.
-            </CardDescription>
-          </div>
-          {summary.peak ? (
-            <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-secondary/70 px-4 py-3 ring-1 ring-primary/8">
-              <span className="size-2 rounded-full bg-chart-3" aria-hidden="true" />
-              <div>
-                <p className="text-[0.65rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-                  Peak day
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-foreground">
-                  {formatDate(summary.peak.date, { day: "numeric", month: "short", year: false })}
-                  <span className="font-normal text-muted-foreground">
-                    {" "}
-                    · {number(summary.peak.soldOutPairs)} placements
-                  </span>
-                </p>
-              </div>
-            </div>
-          ) : null}
-        </CardHeader>
-        <CardContent className="px-3 py-5 sm:px-6 sm:py-6">
-          <StockoutTrendChart daily={daily} />
-        </CardContent>
-      </Card>
+      <ChartSection
+        title="Sold-out fixed placements"
+        daily={daily}
+        value={({ soldOutPairs }) => soldOutPairs}
+        color="var(--chart-3)"
+        mode="line"
+        wide
+      />
 
-      <Card className="rounded-3xl border-0 py-0 shadow-[0_18px_50px_rgb(31_45_37/5%)] ring-1 ring-foreground/8">
-        <CardHeader className="border-b border-border/60 px-5 py-5 sm:px-7 sm:py-6">
-          <CardTitle className="font-serif text-2xl font-normal tracking-[-0.025em] sm:text-3xl">
-            Daily detail
-          </CardTitle>
-          <CardDescription>
-            Exact daily totals for sold-out placements, affected wines and stores, and newly
-            depleted stock.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-0 pb-2">
-          <div className="flex items-center gap-2 px-5 py-3 text-xs text-muted-foreground sm:hidden">
-            <span>Swipe to see every daily measure</span>
-            <MoveRight className="size-4" aria-hidden="true" />
+      <div className="grid min-w-0 gap-7 lg:grid-cols-3">
+        <ChartSection
+          title="Wines affected"
+          daily={daily}
+          value={({ distinctWinesSoldOut }) => distinctWinesSoldOut}
+          color="var(--chart-4)"
+          mode="bars"
+        />
+        <ChartSection
+          title="Stores affected"
+          daily={daily}
+          value={({ distinctStoresAffected }) => distinctStoresAffected}
+          color="var(--chart-3)"
+          mode="bars"
+        />
+        <ChartSection
+          title="New stockouts"
+          daily={daily}
+          value={({ newlySoldOutPairs }) => newlySoldOutPairs}
+          color="var(--chart-2)"
+          mode="bars"
+        />
+      </div>
+
+      <section className="border-t border-border pt-5 sm:pt-6" aria-labelledby="sold-out-wines">
+        <div className="flex items-baseline justify-between gap-4">
+          <h2 id="sold-out-wines" className="text-lg font-semibold tracking-[-0.02em]">
+            Sold-out wines
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {number(wines.length)} affected in this period
+          </p>
+        </div>
+        {wines.length === 0 ? (
+          <p className="mt-5 text-sm text-muted-foreground">No fixed-assortment stockouts.</p>
+        ) : (
+          <div className="mt-5 divide-y divide-border">
+            {wines.map((wine) => (
+              <SoldOutWine
+                key={wine.wine.id}
+                statistics={wine}
+                maximumStoreDays={maximumStoreDays}
+                period={statistics.period}
+              />
+            ))}
           </div>
-          <Table className="min-w-225">
+        )}
+      </section>
+
+      <section className="border-t border-border pt-5 sm:pt-6" aria-labelledby="daily-numbers">
+        <h2 id="daily-numbers" className="text-lg font-semibold tracking-[-0.02em]">
+          Daily numbers
+        </h2>
+        <div className="mt-4 overflow-x-auto border-y border-border">
+          <Table className="min-w-180">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="sticky left-0 z-10 bg-card pl-5 shadow-[10px_0_18px_-18px_rgb(31_45_37/55%)] sm:static sm:pl-7 sm:shadow-none">
-                  Date
-                </TableHead>
-                <TableHead className="text-right">Out of stock</TableHead>
+                <TableHead className="pl-3 sm:pl-4">Date</TableHead>
+                <TableHead className="text-right">Sold out</TableHead>
+                <TableHead className="text-right">Availability</TableHead>
                 <TableHead className="text-right">Wines</TableHead>
                 <TableHead className="text-right">Stores</TableHead>
-                <TableHead className="text-right">New sold-out</TableHead>
-                <TableHead className="text-right">Bottles depleted</TableHead>
-                <TableHead className="pr-5 text-right sm:pr-7">Bottles in stock</TableHead>
+                <TableHead className="pr-3 text-right sm:pr-4">New stockouts</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {daily.map((entry) => {
-                const isPeak = entry.date === summary.peak?.date;
-                return (
-                  <TableRow
-                    key={entry.date}
-                    className={cn(isPeak && "bg-secondary/55 hover:bg-secondary/70")}
-                  >
-                    <TableCell
-                      className={cn(
-                        "sticky left-0 z-10 bg-card pl-5 font-medium whitespace-nowrap shadow-[10px_0_18px_-18px_rgb(31_45_37/55%)] sm:static sm:pl-7 sm:shadow-none",
-                        isPeak && "bg-secondary",
-                      )}
-                    >
-                      {formatDate(entry.date)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {number(entry.soldOutPairs)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {number(entry.distinctWinesSoldOut)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {number(entry.distinctStoresAffected)}
-                    </TableCell>
-                    <TableCell className="text-right">{number(entry.newlySoldOutPairs)}</TableCell>
-                    <TableCell className="text-right">
-                      {number(entry.bottlesLostToStockouts)}
-                    </TableCell>
-                    <TableCell className="pr-5 text-right sm:pr-7">
-                      {number(entry.totalBottles)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {[...daily].reverse().map((entry, index) => (
+                <TableRow key={entry.date} className={cn(index === 0 && "bg-secondary/45")}>
+                  <TableCell className="pl-3 font-medium whitespace-nowrap sm:pl-4">
+                    {formatDate(entry.date)}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {number(entry.soldOutPairs)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {percentage(
+                      entry.trackedPairs === 0 ? 0 : entry.inStockPairs / entry.trackedPairs,
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">{number(entry.distinctWinesSoldOut)}</TableCell>
+                  <TableCell className="text-right">
+                    {number(entry.distinctStoresAffected)}
+                  </TableCell>
+                  <TableCell className="pr-3 text-right sm:pr-4">
+                    {number(entry.newlySoldOutPairs)}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
 
-      <div className="rounded-2xl border border-border/70 bg-card/65 px-4 py-4 text-xs leading-relaxed text-muted-foreground sm:px-5">
-        <strong className="font-semibold text-foreground">How this is counted.</strong> A tracked
-        placement is a fixed-assortment wine-store pair, or a pair observed with stock during this
-        period or its comparison reading. Missing rows in a covered daily snapshot mean zero
-        bottles. “Bottles depleted” reflects stock movement into zero and is not a confirmed sales
-        measure.
-      </div>
+      <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+        Fixed-assortment placements only. Optional local stock is excluded from sold-out counts.
+      </p>
     </div>
   );
 };

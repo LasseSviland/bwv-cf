@@ -20,6 +20,7 @@ export type {
   Month,
   Period,
   StatisticsResponse,
+  StockoutWineStatistics,
   StatusResponse,
   WineInventoryEntry,
   WineInventoryResponse,
