@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   startTransition,
   useDeferredValue,
@@ -205,24 +205,45 @@ export const CatalogBrowser = <T,>({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-6">
-      <PageHeader title={title} description={description} />
-      <PeriodPicker
-        period={period}
-        onChange={setPeriod}
-        availableMonths={status?.availableMonths}
-      />
-      <div className="space-y-2" role="search">
-        <Input
-          className="h-10 bg-card"
-          id={`${kind}-search`}
-          type="search"
-          value={draft}
-          placeholder={searchPlaceholder || searchLabel}
-          aria-label={searchLabel}
-          onChange={(event) => updateSearch(event.target.value)}
-        />
-      </div>
+    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-7 sm:gap-9">
+      <PageHeader eyebrow="Portfolio" title={title} description={description} />
+      <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5">
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="mb-2.5 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+              Inventory period
+            </p>
+            <PeriodPicker
+              period={period}
+              onChange={setPeriod}
+              availableMonths={status?.availableMonths}
+            />
+          </div>
+          <div className="border-t border-border/70 pt-4" role="search">
+            <label
+              className="mb-2.5 block text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase"
+              htmlFor={`${kind}-search`}
+            >
+              {searchLabel}
+            </label>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                className="h-12 rounded-2xl border-border/80 bg-background/70 pr-4 pl-11 shadow-none"
+                id={`${kind}-search`}
+                type="search"
+                value={draft}
+                placeholder={searchPlaceholder || searchLabel}
+                aria-label={searchLabel}
+                onChange={(event) => updateSearch(event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {!loading && sortedItems.length > 0 ? (
         <div className="flex items-center justify-between gap-4">
@@ -260,11 +281,13 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {sortedItems.length > 0 ? (
         <>
-          <div className="rounded-xl border bg-card px-5 sm:px-6">
+          <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/90 px-5 shadow-[0_24px_70px_rgb(31_45_37/6%)] sm:px-7">
             {visibleItems.map((item, index) => (
               <div
                 className={
-                  index === sortedItems.length - 1 ? "px-0" : "-mx-5 border-b px-5 sm:-mx-6 sm:px-6"
+                  index === visibleItems.length - 1
+                    ? "px-0"
+                    : "-mx-5 border-b border-border/70 px-5 sm:-mx-7 sm:px-7"
                 }
                 key={itemKey(item)}
               >

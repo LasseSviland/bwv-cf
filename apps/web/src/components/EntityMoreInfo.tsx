@@ -1,5 +1,21 @@
-import { ChevronDown, Info, LoaderCircle } from "lucide-react";
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import {
+  ChevronDown,
+  CircleDollarSign,
+  Clock3,
+  Database,
+  ExternalLink,
+  FlaskConical,
+  Grape,
+  Info,
+  LoaderCircle,
+  MapPin,
+  Phone,
+  Sparkles,
+  Store,
+  Utensils,
+  Wine,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { api } from "../api/client";
 import type { JsonObject, JsonValue } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
@@ -39,13 +55,55 @@ const fieldLabel = (key: string): string => {
     .replace(/\bVat\b/g, "VAT");
 };
 
+const objectValue = (value: JsonValue | undefined): JsonObject | null =>
+  value && !Array.isArray(value) && typeof value === "object" ? value : null;
+
+const valueAt = (source: JsonObject, path: string): JsonValue | undefined => {
+  let current: JsonValue = source;
+  for (const segment of path.split(".")) {
+    const object = objectValue(current);
+    if (!object) return undefined;
+    current = object[segment] ?? null;
+  }
+  return meaningful(current) ? current : undefined;
+};
+
+const firstValue = (source: JsonObject, ...paths: string[]): JsonValue | undefined => {
+  for (const path of paths) {
+    const value = valueAt(source, path);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+};
+
+const display = (value: JsonValue | undefined): string | null => {
+  if (value === undefined || value === null || typeof value === "object") return null;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+};
+
+const textAt = (source: JsonObject, ...paths: string[]): string | null =>
+  display(firstValue(source, ...paths));
+
+const objectsAt = (source: JsonObject, path: string): JsonObject[] => {
+  const value = valueAt(source, path);
+  if (!Array.isArray(value)) return [];
+  return value.map(objectValue).filter((item): item is JsonObject => item !== null);
+};
+
 const PrimitiveValue = ({ value }: { value: boolean | number | string }) => {
   if (typeof value === "boolean") return <>{value ? "Yes" : "No"}</>;
   if (typeof value === "number") return <>{value.toLocaleString("en-GB")}</>;
   if (/^https?:\/\//i.test(value)) {
     return (
-      <a className="break-all text-primary underline" href={value} rel="noreferrer" target="_blank">
+      <a
+        className="inline-flex max-w-full items-center gap-1 break-all text-primary underline"
+        href={value}
+        rel="noreferrer"
+        target="_blank"
+      >
         {value}
+        <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
       </a>
     );
   }
@@ -64,7 +122,10 @@ const DataValue = ({ value, path }: { value: JsonValue; path: string }) => {
     return (
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map((item, index) => (
-          <div className="rounded-lg border bg-background/60 p-3" key={`${path}-${index}`}>
+          <div
+            className="rounded-xl border border-border/70 bg-background/60 p-3"
+            key={`${path}-${index}`}
+          >
             <DataValue value={item} path={`${path}.${String(index)}`} />
           </div>
         ))}
@@ -78,7 +139,7 @@ const DataObject = ({ value, path }: { value: JsonObject; path: string }) => {
   const entries = Object.entries(value).filter(([, entry]) => meaningful(entry));
   if (entries.length === 0) return null;
   return (
-    <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-[minmax(9rem,0.35fr)_minmax(0,0.65fr)]">
+    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(9rem,0.35fr)_minmax(0,0.65fr)]">
       {entries.map(([key, entry]) => (
         <div className="grid gap-1 sm:col-span-2 sm:grid-cols-subgrid" key={`${path}.${key}`}>
           <dt className="text-xs font-medium tracking-wide text-muted-foreground">
@@ -90,6 +151,340 @@ const DataObject = ({ value, path }: { value: JsonObject; path: string }) => {
         </div>
       ))}
     </dl>
+  );
+};
+
+const ProfileCard = ({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) => (
+  <div className="rounded-2xl border border-border/65 bg-background/55 p-4">
+    <div className="flex items-center gap-2 text-primary">
+      {icon}
+      <p className="text-[0.62rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
+        {label}
+      </p>
+    </div>
+    <div className="mt-2 text-sm leading-6 font-medium text-foreground">{value}</div>
+  </div>
+);
+
+const Section = ({
+  icon,
+  title,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  children: ReactNode;
+}) => (
+  <section className="rounded-2xl border border-border/65 bg-background/45 p-5 sm:p-6">
+    <div className="flex items-center gap-2.5 text-primary">
+      {icon}
+      <h3 className="font-serif text-xl font-normal tracking-[-0.02em]">{title}</h3>
+    </div>
+    <div className="mt-4 text-sm leading-7 text-muted-foreground">{children}</div>
+  </section>
+);
+
+const TechnicalSource = ({ sourceData }: { sourceData: JsonObject }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="group/source rounded-2xl border border-border/70 bg-background/40"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-5">
+        <span className="flex items-center gap-2">
+          <Database className="size-4" aria-hidden="true" />
+          Complete source data
+        </span>
+        <ChevronDown
+          className="size-4 transition-transform group-open/source:rotate-180"
+          aria-hidden="true"
+        />
+      </summary>
+      {open ? (
+        <div className="max-h-[34rem] overflow-auto border-t border-border/70 px-4 py-5 sm:px-5">
+          <DataObject value={sourceData} path="sourceData" />
+        </div>
+      ) : null}
+    </details>
+  );
+};
+
+const WineProfile = ({ sourceData }: { sourceData: JsonObject }) => {
+  const origin = [
+    textAt(sourceData, "origins.origin.country", "legacyDatabase.land"),
+    textAt(sourceData, "origins.origin.region", "legacyDatabase.distrikt"),
+    textAt(sourceData, "origins.origin.subRegion", "legacyDatabase.underdistrikt"),
+  ].filter(Boolean);
+  const grapes = objectsAt(sourceData, "ingredients.grapes")
+    .map((grape) => {
+      const name = display(grape.grapeDesc);
+      const percentage = display(grape.grapePct);
+      return name ? `${name}${percentage ? ` ${percentage}%` : ""}` : null;
+    })
+    .filter(Boolean);
+  const style = textAt(
+    sourceData,
+    "classification.productTypeName",
+    "classification.productGroupName",
+    "legacyDatabase.varetype",
+  );
+  const volume = textAt(sourceData, "basic.volume", "legacyDatabase.volum");
+  const alcohol = textAt(sourceData, "basic.alcoholContent", "legacyDatabase.alkohol");
+  const price = textAt(sourceData, "prices.salesPrice", "legacyDatabase.pris");
+  const pricePerLitre = textAt(sourceData, "prices.salesPricePrLiter", "legacyDatabase.literpris");
+  const colour = textAt(sourceData, "description.characteristics.colour", "legacyDatabase.farge");
+  const odour = textAt(sourceData, "description.characteristics.odour", "legacyDatabase.lukt");
+  const taste = textAt(sourceData, "description.characteristics.taste", "legacyDatabase.smak");
+  const production = textAt(
+    sourceData,
+    "properties.productionMethodStorage",
+    "legacyDatabase.metode",
+  );
+  const storage = textAt(sourceData, "properties.storagePotential", "legacyDatabase.lagringsgrad");
+  const producer = textAt(sourceData, "basic.manufacturerName", "legacyDatabase.produsent");
+  const sugar = textAt(sourceData, "ingredients.sugar", "legacyDatabase.sukker");
+  const acid = textAt(sourceData, "ingredients.acid", "legacyDatabase.syre");
+  const food = objectsAt(sourceData, "recommendedFood")
+    .map((item) => display(item.foodDesc))
+    .filter((item): item is string => item !== null);
+  const legacyFood = ["passertil01", "passertil02", "passertil03"]
+    .map((key) => textAt(sourceData, `legacyDatabase.${key}`))
+    .filter((item): item is string => item !== null);
+  const foodPairings = food.length ? food : legacyFood;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ProfileCard
+          icon={<MapPin className="size-4" aria-hidden="true" />}
+          label="Origin"
+          value={origin.length ? origin.join(" · ") : "Origin not supplied"}
+        />
+        <ProfileCard
+          icon={<Grape className="size-4" aria-hidden="true" />}
+          label="Grapes"
+          value={
+            grapes.length
+              ? grapes.join(" · ")
+              : textAt(sourceData, "legacyDatabase.rastoff") || "Not supplied"
+          }
+        />
+        <ProfileCard
+          icon={<Wine className="size-4" aria-hidden="true" />}
+          label="Style"
+          value={
+            <>
+              {style || "Wine"}
+              {(volume || alcohol) && (
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                  {[volume ? `${volume} L` : null, alcohol ? `${alcohol}% ABV` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              )}
+            </>
+          }
+        />
+        <ProfileCard
+          icon={<CircleDollarSign className="size-4" aria-hidden="true" />}
+          label="Current price"
+          value={
+            price ? (
+              <>
+                {Number(price).toLocaleString("nb-NO", { style: "currency", currency: "NOK" })}
+                {pricePerLitre ? (
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {Number(pricePerLitre).toLocaleString("nb-NO")} kr / litre
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              "Price not supplied"
+            )
+          }
+        />
+      </div>
+
+      {(colour || odour || taste) && (
+        <Section icon={<Sparkles className="size-4" aria-hidden="true" />} title="Tasting profile">
+          <dl className="grid gap-5 lg:grid-cols-3">
+            {colour ? (
+              <div>
+                <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-foreground/55 uppercase">
+                  Colour
+                </dt>
+                <dd className="mt-1">{colour}</dd>
+              </div>
+            ) : null}
+            {odour ? (
+              <div>
+                <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-foreground/55 uppercase">
+                  Aroma
+                </dt>
+                <dd className="mt-1">{odour}</dd>
+              </div>
+            ) : null}
+            {taste ? (
+              <div>
+                <dt className="text-[0.62rem] font-semibold tracking-[0.12em] text-foreground/55 uppercase">
+                  Palate
+                </dt>
+                <dd className="mt-1">{taste}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </Section>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {foodPairings.length ? (
+          <Section
+            icon={<Utensils className="size-4" aria-hidden="true" />}
+            title="Pairs beautifully with"
+          >
+            <div className="flex flex-wrap gap-2">
+              {foodPairings.map((item) => (
+                <span
+                  className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground"
+                  key={item}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </Section>
+        ) : null}
+        {(production || storage || sugar || acid) && (
+          <Section
+            icon={<FlaskConical className="size-4" aria-hidden="true" />}
+            title="Winemaking & keeping"
+          >
+            <dl className="space-y-3">
+              {producer ? (
+                <div>
+                  <dt className="font-medium text-foreground">Producer</dt>
+                  <dd>{producer}</dd>
+                </div>
+              ) : null}
+              {production ? (
+                <div>
+                  <dt className="font-medium text-foreground">Production</dt>
+                  <dd>{production}</dd>
+                </div>
+              ) : null}
+              {storage ? (
+                <div>
+                  <dt className="font-medium text-foreground">Cellaring</dt>
+                  <dd>{storage}</dd>
+                </div>
+              ) : null}
+              {sugar || acid ? (
+                <div>
+                  <dt className="font-medium text-foreground">Balance</dt>
+                  <dd>
+                    {[sugar ? `${sugar} g/L sugar` : null, acid ? `${acid} g/L acidity` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </Section>
+        )}
+      </div>
+      <TechnicalSource sourceData={sourceData} />
+    </div>
+  );
+};
+
+const StoreProfile = ({ sourceData }: { sourceData: JsonObject }) => {
+  const street = textAt(sourceData, "address.street", "legacyDatabase.gateadresse");
+  const postalCode = textAt(sourceData, "address.postalCode", "legacyDatabase.gatePostnummer");
+  const city = textAt(sourceData, "address.city", "legacyDatabase.gatePoststed");
+  const phone = textAt(sourceData, "telephone", "legacyDatabase.telefonnummer");
+  const email = textAt(sourceData, "email");
+  const status = textAt(sourceData, "status");
+  const category = textAt(sourceData, "category", "legacyDatabase.kategori");
+  const profile = textAt(sourceData, "profile");
+  const assortment = textAt(sourceData, "storeAssortment");
+  const hours = objectsAt(sourceData, "openingHours.regularHours");
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ProfileCard
+          icon={<MapPin className="size-4" aria-hidden="true" />}
+          label="Address"
+          value={
+            [street, [postalCode, city].filter(Boolean).join(" ")].filter(Boolean).join(", ") ||
+            "Not supplied"
+          }
+        />
+        <ProfileCard
+          icon={<Phone className="size-4" aria-hidden="true" />}
+          label="Contact"
+          value={
+            <>
+              {phone || "Not supplied"}
+              {email ? (
+                <span className="mt-1 block break-all text-xs font-normal text-muted-foreground">
+                  {email}
+                </span>
+              ) : null}
+            </>
+          }
+        />
+        <ProfileCard
+          icon={<Store className="size-4" aria-hidden="true" />}
+          label="Store profile"
+          value={
+            [category ? `Category ${category}` : null, profile, assortment]
+              .filter(Boolean)
+              .join(" · ") || "Not supplied"
+          }
+        />
+        <ProfileCard
+          icon={<Sparkles className="size-4" aria-hidden="true" />}
+          label="Status"
+          value={status || "Status not supplied"}
+        />
+      </div>
+
+      {hours.length ? (
+        <Section
+          icon={<Clock3 className="size-4" aria-hidden="true" />}
+          title="Regular opening hours"
+        >
+          <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+            {hours.map((entry, index) => {
+              const day = display(entry.dayOfTheWeek) || `Day ${index + 1}`;
+              const closed = entry.closed === true;
+              const opening = display(entry.openingTime);
+              const closing = display(entry.closingTime);
+              return (
+                <div
+                  className="flex items-center justify-between gap-4 border-b border-border/65 py-2"
+                  key={`${day}-${index}`}
+                >
+                  <dt className="font-medium text-foreground">{day}</dt>
+                  <dd>{closed ? "Closed" : [opening, closing].filter(Boolean).join("–")}</dd>
+                </div>
+              );
+            })}
+          </dl>
+        </Section>
+      ) : null}
+      <TechnicalSource sourceData={sourceData} />
+    </div>
   );
 };
 
@@ -134,21 +529,25 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
 
   return (
     <details
-      className={cn("group rounded-lg border border-transparent open:border-border", className)}
+      className={cn(
+        "group/details rounded-2xl border border-transparent transition-colors open:border-border/70 open:bg-muted/25",
+        className,
+      )}
       onToggle={toggle}
     >
       <summary
-        className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-full px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label={`More information about ${label}`}
       >
         <Info className="size-3.5" aria-hidden="true" />
-        More info
+        <span className="sr-only">More info</span>
+        {kind === "wine" ? "Wine details" : "Store details"}
         <ChevronDown
-          className="size-3.5 transition-transform group-open:rotate-180"
+          className="size-3.5 transition-transform group-open/details:rotate-180"
           aria-hidden="true"
         />
       </summary>
-      <div className="border-t px-3 py-4 sm:px-4">
+      <div className="border-t border-border/70 px-3 py-4 sm:px-5 sm:py-5">
         {state === "loading" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
@@ -166,9 +565,11 @@ export const EntityMoreInfo = ({ kind, entityId, label, className }: EntityMoreI
           </Alert>
         ) : null}
         {sourceData ? (
-          <div className="max-h-[32rem] overflow-auto pr-2">
-            <DataObject value={sourceData} path="sourceData" />
-          </div>
+          kind === "wine" ? (
+            <WineProfile sourceData={sourceData} />
+          ) : (
+            <StoreProfile sourceData={sourceData} />
+          )
         ) : null}
       </div>
     </details>

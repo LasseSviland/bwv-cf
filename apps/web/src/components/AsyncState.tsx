@@ -4,9 +4,16 @@ interface ErrorStateProps {
 }
 
 export const LoadingState = ({ label = "Loading inventory…" }: { label?: string }) => (
-  <Card role="status" aria-live="polite" aria-busy="true">
-    <CardContent className="flex items-center gap-4 py-4">
-      <LoaderCircle className="size-5 animate-spin text-primary" aria-hidden="true" />
+  <Card
+    className="rounded-2xl bg-card/80 shadow-none"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+  >
+    <CardContent className="flex items-center gap-4 py-5">
+      <span className="grid size-9 place-items-center rounded-full bg-secondary text-primary">
+        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+      </span>
       <div>
         <strong className="font-medium">{label}</strong>
         <p className="mt-1 text-sm text-muted-foreground">

@@ -1,12 +1,13 @@
+import { Globe2, Hash, Layers3, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import { DetailHero } from "../components/DetailHero";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { InventoryMatrix, type InventoryRow } from "../components/InventoryMatrix";
-import { PageHeader } from "../components/PageHeader";
 import { PeriodPicker } from "../components/PeriodPicker";
 import {
   Breadcrumb,
@@ -23,7 +24,12 @@ import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import type { AppShellOutletContext } from "../layout/AppShell";
 import { classifyWineForStore, storeAssortmentLabel } from "../utils/assortment";
-import { wasSoldOutAtSomePoint } from "../utils/dates";
+import {
+  formatDate,
+  latestAvailableDate,
+  latestCount,
+  wasSoldOutAtSomePoint,
+} from "../utils/dates";
 
 export const WineDetailPage = () => {
   const { wineId = "" } = useParams();
@@ -104,44 +110,119 @@ export const WineDetailPage = () => {
 
   const { wine } = request.data;
   const freshness: Freshness = request.data;
+  const latestDate = latestAvailableDate(
+    request.data.period.from,
+    request.data.period.to,
+    request.data,
+  );
+  const currentBottles = latestDate
+    ? request.data.monopolies.reduce(
+        (total, entry) => total + latestCount(entry.inventory, latestDate),
+        0,
+      )
+    : 0;
+  const storesInStock = latestDate
+    ? request.data.monopolies.filter((entry) => latestCount(entry.inventory, latestDate) > 0).length
+    : 0;
+  const requiredSoldOut = latestDate
+    ? request.data.monopolies.filter(
+        (entry) =>
+          classifyWineForStore(wine, entry.monopoly).status === "required" &&
+          latestCount(entry.inventory, latestDate) === 0,
+      ).length
+    : 0;
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title={wine.name} />
+    <div className="flex w-full min-w-0 flex-col gap-7 sm:gap-9">
+      <DetailHero
+        eyebrow="Wine portfolio"
+        title={wine.name}
+        metadata={
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <Hash className="size-3.5" aria-hidden="true" /> Product {wine.productNumber}
+            </span>
+            {wine.country ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Globe2 className="size-3.5" aria-hidden="true" /> {wine.country}
+              </span>
+            ) : null}
+            {wine.wineCategory || wine.assortment ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Layers3 className="size-3.5" aria-hidden="true" />
+                {[wine.wineCategory, wine.assortment].filter(Boolean).join(" · ")}
+              </span>
+            ) : null}
+          </>
+        }
+        metrics={[
+          {
+            label: "Bottles available",
+            value: currentBottles.toLocaleString("en-GB"),
+            detail: latestDate ? `Across Norway · ${formatDate(latestDate)}` : "No current data",
+          },
+          {
+            label: "Stores in stock",
+            value: storesInStock.toLocaleString("en-GB"),
+            detail: `of ${request.data.monopolies.length.toLocaleString("en-GB")} tracked stores`,
+          },
+          {
+            label: "Required stores sold out",
+            value: requiredSoldOut.toLocaleString("en-GB"),
+            detail: "Current fixed-assortment gaps",
+          },
+        ]}
+      />
 
       <EntityMoreInfo kind="wine" entityId={String(wine.id)} label={wine.name} />
 
-      <PeriodPicker
-        period={period}
-        onChange={setPeriod}
-        availableMonths={status?.availableMonths}
-      />
+      <section className="rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6">
+        <div>
+          <p className="text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+            Availability explorer
+          </p>
+          <h2 className="mt-1 font-serif text-2xl font-normal tracking-[-0.025em]">
+            Find this wine by store
+          </h2>
+        </div>
+        <div className="mt-5 border-t border-border/70 pt-5">
+          <PeriodPicker
+            period={period}
+            onChange={setPeriod}
+            availableMonths={status?.availableMonths}
+          />
+        </div>
 
-      {request.loading ? <LoadingState label="Loading wine availability…" /> : null}
-      {!request.loading && request.error ? (
-        <ErrorState error={request.error} onRetry={request.reload} />
-      ) : null}
-
-      <div className="space-y-3">
-        <Input
-          id="store-filter"
-          type="search"
-          className="bg-card"
-          placeholder="Search stores by name, number or city"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <Label className="flex items-center gap-2 font-normal">
+        <div className="relative mt-5">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            id="store-filter"
+            type="search"
+            className="h-12 rounded-2xl border-border bg-background/65 pr-4 pl-11 shadow-none"
+            placeholder="Search stores by name, number or city"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <Label className="flex items-center gap-2 rounded-full border border-border/70 bg-background/55 px-3 py-2 font-normal">
             <Checkbox
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
             Sold out in required assortment
           </Label>
-          <span>{rows.length} stores shown</span>
+          <span className="font-medium">{rows.length} stores shown</span>
         </div>
-      </div>
+      </section>
+
+      {request.loading ? <LoadingState label="Loading wine availability…" /> : null}
+      {!request.loading && request.error ? (
+        <ErrorState error={request.error} onRetry={request.reload} />
+      ) : null}
 
       <InventoryMatrix
         rows={rows}

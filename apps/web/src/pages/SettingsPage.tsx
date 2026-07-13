@@ -31,13 +31,21 @@ export const SettingsPage = () => {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-6">
-      <PageHeader title="Settings" description="Manage the daily Vinmonopolet data refresh." />
+    <div className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-8">
+      <PageHeader
+        eyebrow="Administration"
+        title="Settings"
+        description="Manage the daily Vinmonopolet data refresh and keep the portfolio current."
+      />
 
-      <Card>
+      <Card className="rounded-3xl border-0 p-2 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/8 sm:p-4">
         <CardHeader>
-          <Database className="mb-2 size-5 text-primary" />
-          <CardTitle>Inventory sync</CardTitle>
+          <span className="mb-4 grid size-11 place-items-center rounded-2xl bg-secondary text-primary">
+            <Database className="size-5" aria-hidden="true" />
+          </span>
+          <CardTitle className="font-serif text-2xl font-normal tracking-[-0.025em]">
+            Inventory sync
+          </CardTitle>
           <CardDescription>
             Refresh the merged wine and monopoly catalogs, then store today&apos;s complete stock
             response. The scheduled sync runs once every morning.
@@ -45,6 +53,7 @@ export const SettingsPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
+            className="h-11 rounded-xl px-4"
             type="button"
             disabled={running || !apiKey}
             aria-busy={running}

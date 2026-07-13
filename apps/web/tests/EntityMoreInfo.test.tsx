@@ -39,7 +39,9 @@ describe("EntityMoreInfo", () => {
       },
     });
 
-    expect(await screen.findByText(/product long name/i)).toBeTruthy();
+    expect(await screen.findByText("Style")).toBeTruthy();
+    await user.click(screen.getByText("Complete source data"));
+    expect(screen.getByText(/product long name/i)).toBeTruthy();
     expect(screen.getByText("Fjordglimt Riesling")).toBeTruthy();
     expect(screen.getByText("Organic")).toBeTruthy();
     expect(screen.getByText("Yes")).toBeTruthy();

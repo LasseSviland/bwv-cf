@@ -7,33 +7,33 @@
 
 :root {
   color-scheme: light;
-  --background: #f6f2e9;
-  --foreground: #17251d;
-  --card: #fffdf8;
-  --card-foreground: #17251d;
-  --popover: #fffdf9;
-  --popover-foreground: #17251d;
-  --primary: #173b2b;
+  --background: #f5f3ee;
+  --foreground: #14241b;
+  --card: #fffefa;
+  --card-foreground: #14241b;
+  --popover: #fffefa;
+  --popover-foreground: #14241b;
+  --primary: #153d2d;
   --primary-foreground: #ffffff;
-  --secondary: #e7eee9;
-  --secondary-foreground: #173b2b;
-  --muted: #ebe7dd;
-  --muted-foreground: #4c5d53;
-  --accent: #e2ece5;
-  --accent-foreground: #173b2b;
+  --secondary: #e8f0eb;
+  --secondary-foreground: #153d2d;
+  --muted: #ece9e2;
+  --muted-foreground: #58665e;
+  --accent: #e5eee8;
+  --accent-foreground: #153d2d;
   --destructive: #9d3941;
-  --border: #c9c4b8;
-  --input: #aaa99d;
-  --ring: #286b4b;
-  --chart-1: #173b2b;
+  --border: #d7d3ca;
+  --input: #b9b6ae;
+  --ring: #2c7452;
+  --chart-1: #153d2d;
   --chart-2: #2f6d4d;
   --chart-3: #8e364c;
   --chart-4: #8b5d16;
   --chart-5: #506158;
-  --radius: 0.7rem;
-  --sidebar: #fffdf9;
-  --sidebar-foreground: #17251d;
-  --sidebar-primary: #173b2b;
+  --radius: 0.875rem;
+  --sidebar: #fffefa;
+  --sidebar-foreground: #14241b;
+  --sidebar-primary: #153d2d;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #e2ece5;
   --sidebar-accent-foreground: #173b2b;
@@ -91,15 +91,23 @@
 
   html {
     @apply min-w-80 bg-background font-sans;
+    scroll-behavior: smooth;
   }
 
   body {
     @apply min-h-screen min-w-80 overflow-x-hidden bg-background text-foreground antialiased;
-    background-image: radial-gradient(
-      circle at 12% -10%,
-      rgb(255 255 255 / 88%),
-      transparent 34rem
-    );
+    background-image:
+      radial-gradient(circle at 8% -5%, rgb(255 255 255 / 92%), transparent 34rem),
+      radial-gradient(circle at 94% 10%, rgb(218 231 222 / 42%), transparent 28rem);
+    font-feature-settings: "ss01", "cv02", "cv03", "cv04";
+  }
+
+  ::selection {
+    background: rgb(44 116 82 / 18%);
+  }
+
+  a {
+    text-underline-offset: 0.2em;
   }
 
   button:not(:disabled),

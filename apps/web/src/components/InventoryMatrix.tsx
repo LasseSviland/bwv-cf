@@ -112,22 +112,32 @@ export const InventoryMatrix = ({
   }
 
   return (
-    <section className="space-y-4" aria-label={`Daily availability by ${entityLabel}`}>
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div className="space-y-1 text-sm text-muted-foreground">
-          <p>Scroll horizontally to move through the period.</p>
+    <section className="space-y-5" aria-label={`Daily availability by ${entityLabel}`}>
+      <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <div>
+          <p className="text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+            Inventory history
+          </p>
+          <h2 className="mt-1 font-serif text-3xl font-normal tracking-[-0.03em]">
+            Daily availability
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Newest dates appear first. Scroll horizontally to explore the full period.
+          </p>
           {showAssortmentExplanation ? (
-            <p>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
               Sold out is used only for the store's fixed assortment. Additional products are
               optional local stock.
             </p>
           ) : null}
         </div>
-        <StockLegend showAdditional={showAdditional} showUnknown={showUnknown} />
+        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+          <StockLegend showAdditional={showAdditional} showUnknown={showUnknown} />
+        </div>
       </div>
 
       <Card
-        className="hidden py-0 md:block"
+        className="hidden rounded-3xl border-0 py-0 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/9 md:block"
         tabIndex={0}
         aria-label="Scrollable daily inventory table"
       >
@@ -135,7 +145,7 @@ export const InventoryMatrix = ({
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                className="sticky left-0 z-30 min-w-64 border-r border-b border-border bg-card px-4"
+                className="sticky left-0 z-30 min-w-72 border-r border-b border-border/80 bg-card px-5"
                 rowSpan={2}
                 scope="col"
               >
@@ -143,7 +153,7 @@ export const InventoryMatrix = ({
               </TableHead>
               {monthGroups.map((group) => (
                 <TableHead
-                  className="h-9 border-r border-b border-border bg-muted/60 text-center text-xs text-muted-foreground"
+                  className="h-9 border-r border-b border-border/70 bg-muted/55 text-center text-[0.65rem] font-semibold tracking-[0.08em] text-muted-foreground uppercase"
                   key={group.month}
                   colSpan={group.dates.length}
                   scope="colgroup"
@@ -153,11 +163,13 @@ export const InventoryMatrix = ({
               ))}
             </TableRow>
             <TableRow className="hover:bg-transparent">
-              {dates.map((date) => {
+              {dates.map((date, dateIndex) => {
                 const parts = dayParts(date);
                 return (
                   <TableHead
-                    className="h-12 min-w-11 border-r border-b border-border bg-muted/30 p-1 text-center"
+                    className={`h-12 min-w-11 border-r border-b border-border/70 p-1 text-center ${
+                      dateIndex === 0 ? "bg-secondary" : "bg-muted/25"
+                    }`}
                     key={date}
                     scope="col"
                     title={formatDate(date)}
@@ -176,25 +188,25 @@ export const InventoryMatrix = ({
               const observations = inventoryMap(row.inventory);
               const separatorClass = rowIndex < rows.length - 1 ? " border-b border-border" : "";
               return (
-                <TableRow key={row.id}>
+                <TableRow className="group/row hover:bg-muted/20" key={row.id}>
                   <th
-                    className={`sticky left-0 z-20 min-w-64 border-r bg-card px-4 py-3 text-left${separatorClass}`}
+                    className={`sticky left-0 z-20 min-w-72 border-r border-border/80 bg-card px-5 py-4 text-left shadow-[8px_0_18px_rgb(31_45_37/3%)] transition-colors group-hover/row:bg-[#fbfaf6]${separatorClass}`}
                     scope="row"
                   >
                     <Link
-                      className="block max-w-56 truncate text-sm font-medium text-primary hover:underline"
+                      className="block max-w-64 truncate font-serif text-base font-normal tracking-[-0.015em] text-primary hover:underline"
                       to={row.href}
                     >
                       {row.label}
                     </Link>
                     {row.secondary ? (
-                      <span className="mt-1 block max-w-56 truncate text-xs font-normal text-muted-foreground">
+                      <span className="mt-1 block max-w-64 truncate text-xs font-normal text-muted-foreground">
                         {row.secondary}
                       </span>
                     ) : null}
                     {assortmentBadge(row)}
                   </th>
-                  {dates.map((date) => {
+                  {dates.map((date, dateIndex) => {
                     const available = isInventoryDateAvailable(date, freshness);
                     const count = observations.get(date) ?? 0;
                     const inStock = count > 0;
@@ -205,14 +217,18 @@ export const InventoryMatrix = ({
                         key={date}
                         className={
                           !available
-                            ? `h-14 min-w-11 border-r bg-muted/30 p-1 text-center text-muted-foreground${separatorClass}`
+                            ? `h-16 min-w-11 border-r border-border/60 bg-muted/30 p-1 text-center text-muted-foreground${separatorClass}`
                             : status === "additional"
-                              ? `h-14 min-w-11 border-r bg-sky-100 p-1 text-center font-semibold text-sky-900${separatorClass}`
+                              ? `h-16 min-w-11 border-r border-sky-200/70 bg-sky-50 p-1 text-center font-semibold text-sky-900${separatorClass}`
                               : status === "unknown"
-                                ? `h-14 min-w-11 border-r bg-amber-100 p-1 text-center text-amber-900${separatorClass}`
+                                ? `h-16 min-w-11 border-r border-amber-200/70 bg-amber-50 p-1 text-center text-amber-900${separatorClass}`
                                 : inStock
-                                  ? `h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900${separatorClass}`
-                                  : `h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900${separatorClass}`
+                                  ? `h-16 min-w-11 border-r border-emerald-200/70 p-1 text-center font-semibold text-emerald-900 ${
+                                      dateIndex === 0 ? "bg-emerald-200/75" : "bg-emerald-50"
+                                    }${separatorClass}`
+                                  : `h-16 min-w-11 border-r border-rose-200/70 p-1 text-center text-rose-900 ${
+                                      dateIndex === 0 ? "bg-rose-200/75" : "bg-rose-50"
+                                    }${separatorClass}`
                         }
                         title={description}
                         aria-label={description}
@@ -247,10 +263,13 @@ export const InventoryMatrix = ({
           const observations = inventoryMap(row.inventory);
           const status = rowStatus(row);
           return (
-            <Card key={row.id}>
-              <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+            <Card
+              className="rounded-2xl border-0 shadow-[0_16px_45px_rgb(31_45_37/6%)] ring-1 ring-foreground/8"
+              key={row.id}
+            >
+              <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-5 pt-5">
                 <div className="min-w-0">
-                  <h3 className="truncate font-medium">
+                  <h3 className="truncate font-serif text-lg font-normal tracking-[-0.02em]">
                     <Link to={row.href}>{row.label}</Link>
                   </h3>
                   {row.secondary ? (
@@ -286,7 +305,7 @@ export const InventoryMatrix = ({
                           : "Sold out"}
                 </Badge>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 px-5 pb-1">
                 {status !== "required" && row.assortmentNote ? (
                   <p className="text-xs text-muted-foreground">{row.assortmentNote}</p>
                 ) : null}

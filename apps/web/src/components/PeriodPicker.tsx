@@ -50,14 +50,18 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
 
   return (
     <div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-1" aria-label="Quick date ranges">
+          <div
+            className="inline-flex max-w-full flex-wrap gap-1 rounded-2xl bg-muted/75 p-1"
+            aria-label="Quick date ranges"
+          >
             {presets.map((preset) => (
               <Button
                 key={preset.label}
-                variant={samePeriod(period, preset.value) ? "secondary" : "ghost"}
+                variant={samePeriod(period, preset.value) ? "default" : "ghost"}
                 size="sm"
+                className="rounded-xl px-3"
                 type="button"
                 onClick={() => {
                   setError(null);
@@ -70,8 +74,9 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
               </Button>
             ))}
             <Button
-              variant={showCustom ? "secondary" : "ghost"}
+              variant={showCustom ? "default" : "ghost"}
               size="sm"
+              className="rounded-xl px-3"
               type="button"
               onClick={() => {
                 setError(null);
@@ -83,11 +88,14 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
           </div>
         </div>
         {showCustom ? (
-          <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={submit}>
-            <Label className="grid gap-1.5">
+          <form
+            className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background/55 p-3 sm:flex-row sm:items-end"
+            onSubmit={submit}
+          >
+            <Label className="grid gap-1.5 text-xs text-muted-foreground">
               From
               <Input
-                className="h-9 w-full sm:w-38"
+                className="h-9 w-full border-border bg-card shadow-none sm:w-38"
                 type="date"
                 value={draft.from}
                 max={draft.to || today}
@@ -101,10 +109,10 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
               className="mb-2.5 hidden size-4 text-muted-foreground sm:block"
               aria-hidden="true"
             />
-            <Label className="grid gap-1.5">
+            <Label className="grid gap-1.5 text-xs text-muted-foreground">
               To
               <Input
-                className="h-9 w-full sm:w-38"
+                className="h-9 w-full border-border bg-card shadow-none sm:w-38"
                 type="date"
                 value={draft.to}
                 min={draft.from}

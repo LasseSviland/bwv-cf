@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Hash, MapPin, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { MonopolyCatalogItem, Period } from "../api/types";
@@ -10,25 +10,48 @@ import { Button } from "../components/ui/button";
 const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; period: Period }) => {
   const href = `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`;
   return (
-    <div className="grid gap-2 py-5 md:grid-cols-[minmax(12rem,0.55fr)_minmax(0,1.45fr)_auto] md:items-center">
+    <div className="grid gap-5 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:py-7">
       <div className="min-w-0">
-        <h2 className="mt-2 truncate text-base font-medium">
-          <Link to={href} title={monopoly.name}>
+        <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.14em] text-primary/65 uppercase">
+          Vinmonopolet store
+        </p>
+        <h2 className="font-serif text-2xl leading-tight font-normal tracking-[-0.025em]">
+          <Link className="transition-colors hover:text-primary/70" to={href} title={monopoly.name}>
             {monopoly.name}
           </Link>
         </h2>
-        {monopoly.monopolyCategory ? (
-          <p className="mt-1 text-xs text-muted-foreground">Category {monopoly.monopolyCategory}</p>
-        ) : null}
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <Hash className="size-3" aria-hidden="true" /> Store {monopoly.storeNumber}
+          </span>
+          {monopoly.city ? (
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin className="size-3" aria-hidden="true" />
+              {[monopoly.postalCode, monopoly.city].filter(Boolean).join(" ")}
+            </span>
+          ) : null}
+          {monopoly.monopolyCategory ? (
+            <span className="inline-flex items-center gap-1.5">
+              <SlidersHorizontal className="size-3" aria-hidden="true" /> Category{" "}
+              {monopoly.monopolyCategory}
+              {monopoly.monopolyProfile ? ` · ${monopoly.monopolyProfile}` : ""}
+            </span>
+          ) : null}
+        </div>
       </div>
       <BottleHistory inventory={monopoly.availability.bottlesByDate} label={monopoly.name} />
-      <Button asChild variant="ghost" size="icon" className="hidden md:inline-flex">
+      <Button
+        asChild
+        variant="ghost"
+        size="icon-lg"
+        className="hidden rounded-full border border-border/70 bg-background/50 lg:inline-flex"
+      >
         <Link to={href} aria-label={`Open ${monopoly.name}`}>
           <ArrowRight />
         </Link>
       </Button>
       <EntityMoreInfo
-        className="md:col-span-3"
+        className="lg:col-span-3"
         kind="monopoly"
         entityId={String(monopoly.id)}
         label={monopoly.name}
@@ -40,7 +63,8 @@ const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; peri
 export const MonopoliesPage = () => (
   <CatalogBrowser<MonopolyCatalogItem>
     kind="monopolies"
-    title="Monopolies"
+    title="Stores"
+    description="See every Vinmonopolet location at a glance, from assortment profile to daily portfolio stock."
     searchLabel="Search monopolies"
     searchPlaceholder="Search by store name, number, postcode, city or category"
     emptyTitle="No monopolies found"
