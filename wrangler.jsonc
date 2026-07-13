@@ -6,8 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
-  "secrets": {
-    "required": ["API_KEY", "VINMONOPOLET_OPEN_API_KEY", "VINMONOPOLET_RESTRICTED_API_KEY"],
+  "vars": {
+    "API_KEY": "BetterWines",
+    "VINMONOPOLET_OPEN_API_KEY": "f3682bb0f6f4465688f7ab91cbc0d6c1",
+    "VINMONOPOLET_RESTRICTED_API_KEY": "8eb36d4889d24613841fdff77166a7d5",
   },
   "placement": {
     "mode": "smart",

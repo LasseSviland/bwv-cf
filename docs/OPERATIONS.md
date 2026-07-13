@@ -4,8 +4,8 @@
 
 1. Install dependencies, generate bindings, and run `pnpm check`.
 2. Create the R2 bucket, Queue, and DLQ named in `wrangler.jsonc` if they do not already exist.
-3. Configure `API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` with `wrangler secret put <NAME>`.
-4. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route.
+3. Review the checked-in `API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` variables in `wrangler.jsonc`.
+4. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route. Wrangler publishes all three variables as part of the deployment.
 5. Verify the SPA password gate plus authenticated `/api/v1/health` and `/api/v1/status` responses.
 6. Open Settings and select **Sync inventories now**.
 7. Verify `catalogs/wines.json`, `catalogs/monopolies.json`, and the current `inventory/YYYY-MM-DD.json` in R2.
@@ -49,11 +49,11 @@ Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and triggering a sy
 - After correcting a dependency, use the Settings button to replay the complete operation.
 - If the DLQ contains a message, retry by triggering a fresh sync after the cause is fixed.
 
-## Secrets and rotation
+## Runtime variables and rotation
 
-- Never print, commit, or place secret values in logged command arguments.
-- Rotate `API_KEY` with `wrangler secret put API_KEY`, then sign in again in the SPA.
-- Rotate either Vinmonopolet subscription key with its matching `wrangler secret put` command, verify a manual sync, and then revoke the previous key.
+- The three application keys are intentionally committed under `vars` in `wrangler.jsonc` and replaced on every deployment.
+- Rotate `API_KEY` by changing the checked-in value and deploying, then sign in again in the SPA.
+- Rotate either Vinmonopolet subscription key by changing its checked-in value, deploying, verifying a manual sync, and then revoking the previous key.
 - Keep the GitHub `CLOUDFLARE_API_TOKEN` scoped to the resources required for deployment.
 
 ## Rollback

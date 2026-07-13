@@ -33,13 +33,12 @@ Requirements: Node.js 22+, pnpm 10+, and Wrangler 4.x.
 
 ```bash
 pnpm install
-cp .dev.vars.example .dev.vars
 pnpm types
 pnpm check
 pnpm dev
 ```
 
-Set `API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` in `.dev.vars`. Browser development can run separately with `pnpm dev:web`; Vite proxies `/api` to the local Worker.
+`API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` are deployment-owned variables in `wrangler.jsonc`, so local Worker development and production deployments use the same checked-in values. Browser development can run separately with `pnpm dev:web`; Vite proxies `/api` to the local Worker.
 
 To run only the frontend locally against the production API, use:
 
@@ -60,10 +59,10 @@ This uses the checked-in `remote-api` Vite mode to proxy `/api` to `https://bwv.
 
 The Queue accepts batches of one and has a maximum concurrency of one. A Cron invocation or the Settings button enqueues exactly one `start-sync` message. The consumer runs the three source operations sequentially in that message.
 
-`API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` are Worker secrets. They are never stored in this repository or compiled into the frontend. Configure them with `wrangler secret put <NAME>`.
+`API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` are checked-in Worker variables in `wrangler.jsonc`. Wrangler publishes them with every deployment, so the Worker does not depend on separately configured Cloudflare secrets. They are runtime bindings and are not compiled into the frontend bundle.
 
 ## Deployment
 
 Pull requests and branches run formatting, linting, strict TypeScript checks, tests, generated-binding checks, and the production frontend build. Pushes to `main` repeat those checks and deploy through Wrangler. Deployments do not delete or rebuild R2 data.
 
-GitHub Actions requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The Cloudflare API token should be scoped only to the Worker and Better Wines resources. See [Operations](docs/OPERATIONS.md) for manual sync, recovery, secret rotation, and rollback.
+GitHub Actions requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The Cloudflare API token should be scoped only to the Worker and Better Wines resources. See [Operations](docs/OPERATIONS.md) for manual sync, recovery, runtime-variable rotation, and rollback.

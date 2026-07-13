@@ -38,7 +38,7 @@ function envFor(r2: MemoryR2): Env {
     DATA_BUCKET: r2.bucket,
     VINMONOPOLET_OPEN_API_KEY: "open-key",
     VINMONOPOLET_RESTRICTED_API_KEY: "restricted-key",
-  } as Env;
+  } as unknown as Env;
 }
 
 describe("single-message sync", () => {

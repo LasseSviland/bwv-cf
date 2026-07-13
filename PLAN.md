@@ -44,7 +44,7 @@ The read API derives its searchable catalog summaries and inventory matrices fro
 - Sequential Vinmonopolet requests, with transient Queue retries and a DLQ.
 - Deterministic R2 keys and create-only inventory writes make redelivery idempotent.
 - Authentication is required for every `/api/v1` endpoint, including manual sync.
-- Secrets remain in Worker secret configuration.
+- Application keys are checked-in Worker variables and are published by every deployment.
 
 ## Out of scope
 
