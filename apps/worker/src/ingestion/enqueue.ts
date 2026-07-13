@@ -1,149 +1,26 @@
-import type { AdminAcceptedResponse, Month, SyncQueueMessage, SyncTrigger } from "@bwv/contracts";
-import {
-  currentAndPreviousMonthsInOslo,
-  currentMonthInOslo,
-  enumerateMonths,
-} from "@bwv/data-format";
+import type { AdminAcceptedResponse, SyncQueueMessage, SyncTrigger } from "@bwv/contracts";
+import { dateInOslo } from "@bwv/data-format";
 
-import {
-  createSyncRun,
-  markCoordinatorFailed,
-  resetApplicationData,
-  type NewMonthSync,
-} from "../storage/d1";
-
-const FIRST_HISTORIC_MONTH: Month = "2026-01";
-
-function newMonthSyncs(months: readonly Month[]): NewMonthSync[] {
-  return months.map((month) => ({ month, generation: crypto.randomUUID() }));
-}
-
-async function sendMessages(env: Env, messages: SyncQueueMessage[]): Promise<void> {
-  await env.SYNC_QUEUE.sendBatch(messages.map((body) => ({ body, contentType: "json" as const })));
-}
-
-export async function enqueueMonths(
+export async function enqueueSync(
   env: Env,
   trigger: SyncTrigger,
-  months: readonly Month[],
+  instant = new Date(),
 ): Promise<AdminAcceptedResponse> {
-  const orderedMonths = [...new Set(months)].sort();
-  const firstMonth = orderedMonths[0];
-  if (firstMonth === undefined) throw new RangeError("At least one sync month is required");
-  const monthSyncs = newMonthSyncs(orderedMonths);
-  const firstSync = monthSyncs[0];
-  if (firstSync === undefined) throw new RangeError("At least one sync month is required");
-  const jobId = crypto.randomUUID();
-  const queuedSyncs = await createSyncRun(env.DB, jobId, trigger, monthSyncs, "extract");
-  const coordinatorSync = queuedSyncs[0];
-  if (coordinatorSync === undefined) {
-    return { jobId, status: "queued", months: orderedMonths };
-  }
-
-  try {
-    await sendMessages(env, [
-      {
-        version: 1,
-        jobId,
-        trigger,
-        month: coordinatorSync.month,
-        generation: coordinatorSync.generation,
-        phase: "refresh-catalogs",
-      },
-    ]);
-  } catch (error) {
-    await markCoordinatorFailed(env.DB, jobId, "Failed to enqueue the catalog coordinator");
-    throw error;
-  }
-  return { jobId, status: "queued", months: orderedMonths };
-}
-
-export async function enqueueBackfill(
-  env: Env,
-  fromMonth: Month = FIRST_HISTORIC_MONTH,
-  throughMonth: Month = currentMonthInOslo(),
-  trigger: SyncTrigger = "backfill",
-): Promise<AdminAcceptedResponse> {
-  if (fromMonth < FIRST_HISTORIC_MONTH) {
-    throw new RangeError(`Backfill cannot start before ${FIRST_HISTORIC_MONTH}`);
-  }
-  const months = enumerateMonths(fromMonth, throughMonth, 100);
-  const monthSyncs = newMonthSyncs(months);
-  const firstSync = monthSyncs[0];
-  if (firstSync === undefined) throw new RangeError("Backfill requires at least one month");
-  const jobId = crypto.randomUUID();
-  const queuedSyncs = await createSyncRun(env.DB, jobId, trigger, monthSyncs, "bootstrap-bounds");
-  const coordinatorSync = queuedSyncs[0];
-  if (coordinatorSync === undefined) {
-    return { jobId, status: "queued", months };
-  }
-
-  const coordinator: SyncQueueMessage = {
+  const date = dateInOslo(instant);
+  const message: SyncQueueMessage = {
     version: 1,
-    jobId,
+    type: "start-sync",
     trigger,
-    month: coordinatorSync.month,
-    generation: coordinatorSync.generation,
-    phase: "bootstrap-bounds",
-    fromMonth,
-    throughMonth,
+    date,
   };
-  try {
-    await env.SYNC_QUEUE.send(coordinator, { contentType: "json" });
-  } catch (error) {
-    await markCoordinatorFailed(env.DB, jobId, "Failed to enqueue the backfill coordinator");
-    throw error;
-  }
-  return { jobId, status: "queued", months };
+  await env.SYNC_QUEUE.send(message, { contentType: "json" });
+  return { status: "queued", date };
 }
 
-export async function enqueueReload(env: Env): Promise<AdminAcceptedResponse> {
-  const fromMonth = FIRST_HISTORIC_MONTH;
-  const throughMonth = currentMonthInOslo();
-  const months = enumerateMonths(fromMonth, throughMonth, 100);
-  const monthSyncs = newMonthSyncs(months);
-  const firstSync = monthSyncs[0];
-  if (firstSync === undefined) throw new RangeError("Reload requires at least one month");
-
-  await resetApplicationData(env.DB);
-  const jobId = crypto.randomUUID();
-  const queuedSyncs = await createSyncRun(env.DB, jobId, "backfill", monthSyncs, "reset");
-  const coordinatorSync = queuedSyncs[0];
-  if (coordinatorSync === undefined) throw new Error("Reload coordinator was not created");
-
-  const coordinator: SyncQueueMessage = {
-    version: 1,
-    jobId,
-    trigger: "backfill",
-    month: coordinatorSync.month,
-    generation: coordinatorSync.generation,
-    phase: "reset",
-    fromMonth,
-    throughMonth,
-  };
-  try {
-    await env.SYNC_QUEUE.send(coordinator, { contentType: "json" });
-  } catch (error) {
-    await markCoordinatorFailed(env.DB, jobId, "Failed to enqueue the reload coordinator");
-    throw error;
-  }
-  return { jobId, status: "queued", months };
+export function enqueueManual(env: Env, instant = new Date()): Promise<AdminAcceptedResponse> {
+  return enqueueSync(env, "manual", instant);
 }
 
-export async function enqueueRefresh(env: Env): Promise<AdminAcceptedResponse> {
-  return enqueueMonths(
-    env,
-    "manual",
-    currentAndPreviousMonthsInOslo().filter((month) => month >= FIRST_HISTORIC_MONTH),
-  );
+export function enqueueScheduled(env: Env, instant: Date): Promise<AdminAcceptedResponse> {
+  return enqueueSync(env, "scheduled", instant);
 }
-
-export async function enqueueScheduled(env: Env, instant: Date): Promise<AdminAcceptedResponse> {
-  return enqueueMonths(
-    env,
-    "scheduled",
-    currentAndPreviousMonthsInOslo(instant).filter((month) => month >= FIRST_HISTORIC_MONTH),
-  );
-}
-
-export { FIRST_HISTORIC_MONTH };

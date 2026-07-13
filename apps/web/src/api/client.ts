@@ -223,11 +223,10 @@ export const api = {
     );
   },
 
-  startHistoricalBackfill(apiKey: string, signal?: AbortSignal): Promise<AdminAcceptedResponse> {
-    return request("/api/v1/admin/backfill", apiKey, AdminAcceptedResponseSchema, {
+  startInventorySync(apiKey: string, signal?: AbortSignal): Promise<AdminAcceptedResponse> {
+    return request("/api/v1/admin/sync-inventories", apiKey, AdminAcceptedResponseSchema, {
       signal,
       method: "POST",
-      body: {},
     });
   },
 };

@@ -2,12 +2,12 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "better-wines-viner",
   "main": "./apps/worker/src/index.ts",
-  "compatibility_date": "2026-07-12",
+  "compatibility_date": "2026-07-13",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
   "secrets": {
-    "required": ["API_KEY"],
+    "required": ["API_KEY", "VINMONOPOLET_OPEN_API_KEY", "VINMONOPOLET_RESTRICTED_API_KEY"],
   },
   "placement": {
     "mode": "smart",
@@ -18,30 +18,10 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"],
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "better-wines-viner-state",
-      "database_id": "6e8cfcf9-97d5-4b20-bfa3-fa148db5f1d5",
-      "migrations_dir": "./migrations",
-    },
-  ],
   "r2_buckets": [
     {
       "binding": "DATA_BUCKET",
       "bucket_name": "better-wines-viner-data",
-    },
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "API_RESPONSE_CACHE",
-      "id": "fdcc0d2dfb754558b373ed6f0291c541",
-    },
-  ],
-  "hyperdrive": [
-    {
-      "binding": "HYPERDRIVE",
-      "id": "3aac2803386c450caa92656fe4a5c994",
     },
   ],
   "queues": {
@@ -64,10 +44,9 @@
     ],
   },
   "triggers": {
-    "crons": ["0 */6 * * *"],
+    "crons": ["15 7 * * *"],
   },
   "limits": {
-    "subrequests": 15000,
     "cpu_ms": 300000,
   },
   "observability": {

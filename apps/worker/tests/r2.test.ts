@@ -1,32 +1,41 @@
 import { describe, expect, it } from "vitest";
 
-import { getRequiredGzipJson, putGzipJson } from "../src/storage/r2";
+import {
+  listCompletedInventoryDates,
+  parseDailyInventoryFile,
+  putJsonIfAbsent,
+} from "../src/storage/r2";
+import { MemoryR2 } from "./r2-fixture";
 
-describe("gzip JSON storage", () => {
-  it("writes actual gzip bytes and restores the JSON value", async () => {
-    let bytes = new ArrayBuffer(0);
-    let metadata: R2HTTPMetadata | undefined;
-    const bucket = {
-      put: async (_key: string, value: ReadableStream, options: R2PutOptions) => {
-        bytes = await new Response(value).arrayBuffer();
-        metadata = options.httpMetadata as R2HTTPMetadata;
-        return { etag: "etag" } as R2Object;
-      },
-      get: () => Promise.resolve({ body: new Blob([bytes]).stream() } as unknown as R2ObjectBody),
-    } as unknown as R2Bucket;
+describe("R2 JSON storage", () => {
+  it("lists only dated inventory files as completed days", async () => {
+    const r2 = new MemoryR2();
+    r2.seed("inventory/2026-07-12.json", {});
+    r2.seed("inventory/readme.json", {});
+    r2.seed("catalogs/wines.json", {});
 
-    const value = {
-      schemaVersion: 2,
-      date: "2026-07-12",
-      generation: "gen",
-      inventory: [{ wineId: 1, monopolyId: 10, count: 4 }],
+    await expect(listCompletedInventoryDates(r2.bucket)).resolves.toEqual([
+      expect.objectContaining({ date: "2026-07-12" }),
+    ]);
+  });
+
+  it("preserves every raw product and stock field", () => {
+    const source = {
+      schemaVersion: 1,
+      syncedAt: "2026-07-13T08:00:00.000Z",
+      date: "2026-07-13",
+      source: "vinmonopolet/my-products/v1/stock-per-store",
+      products: [{ productId: "123", stock: [{ storeId: "1", storeStock: 4, extra: true }] }],
     };
-    await putGzipJson(bucket, "inventory.json.gz", value);
+    expect(parseDailyInventoryFile(source)).toEqual(source);
+  });
 
-    expect([...new Uint8Array(bytes).slice(0, 2)]).toEqual([0x1f, 0x8b]);
-    expect(metadata?.contentEncoding).toBe("gzip");
-    await expect(
-      getRequiredGzipJson(bucket, "inventory.json.gz", (input) => input),
-    ).resolves.toEqual(value);
+  it("creates a daily object only when its key is absent", async () => {
+    const r2 = new MemoryR2();
+    const key = "inventory/2026-07-13.json";
+
+    await expect(putJsonIfAbsent(r2.bucket, key, { capture: "first" })).resolves.toBe(true);
+    await expect(putJsonIfAbsent(r2.bucket, key, { capture: "second" })).resolves.toBe(false);
+    expect(r2.values.get(key)).toEqual({ capture: "first" });
   });
 });

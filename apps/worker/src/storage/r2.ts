@@ -1,90 +1,142 @@
 import { HttpError, PermanentQueueError } from "../errors";
-import { parseRawInventoryChunk } from "../ingestion/projections";
-import type { RawInventoryChunk } from "../types";
-import { rawChunkPrefix } from "./keys";
+import type {
+  CompletedInventoryDate,
+  DailyInventoryFile,
+  JsonObject,
+  MonopolyCatalogFile,
+  WineCatalogFile,
+} from "../types";
+import { INVENTORY_PREFIX, dateFromDailyInventoryKey } from "./keys";
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function parseJsonObject(value: unknown, context: string): JsonObject {
+  if (!isObject(value)) throw new PermanentQueueError(`${context} must be a JSON object`);
+  return value as JsonObject;
+}
+
+export function parseJsonObjectArray(value: unknown, context: string): JsonObject[] {
+  if (!Array.isArray(value)) throw new PermanentQueueError(`${context} must be a JSON array`);
+  return value.map((entry, index) => parseJsonObject(entry, `${context}[${index}]`));
+}
+
+function requiredString(value: unknown, context: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new PermanentQueueError(`${context} must be a non-empty string`);
+  }
+  return value;
+}
+
+export function parseMonopolyCatalogFile(value: unknown): MonopolyCatalogFile {
+  const file = parseJsonObject(value, "Monopoly catalog");
+  if (file.schemaVersion !== 1 || file.source !== "vinmonopolet/stores/v0/details") {
+    throw new PermanentQueueError("Monopoly catalog schema is not supported");
+  }
+  return {
+    schemaVersion: 1,
+    syncedAt: requiredString(file.syncedAt, "Monopoly catalog syncedAt"),
+    source: "vinmonopolet/stores/v0/details",
+    monopolies: parseJsonObjectArray(file.monopolies, "Monopoly catalog monopolies"),
+  };
+}
+
+export function parseWineCatalogFile(value: unknown): WineCatalogFile {
+  const file = parseJsonObject(value, "Wine catalog");
+  if (
+    file.schemaVersion !== 1 ||
+    file.source !== "vinmonopolet/my-products/v1/details-normal" ||
+    file.wholesaler !== "Better Wines AS"
+  ) {
+    throw new PermanentQueueError("Wine catalog schema is not supported");
+  }
+  return {
+    schemaVersion: 1,
+    syncedAt: requiredString(file.syncedAt, "Wine catalog syncedAt"),
+    source: "vinmonopolet/my-products/v1/details-normal",
+    wholesaler: "Better Wines AS",
+    wines: parseJsonObjectArray(file.wines, "Wine catalog wines"),
+  };
+}
+
+export function parseDailyInventoryFile(value: unknown): DailyInventoryFile {
+  const file = parseJsonObject(value, "Daily inventory");
+  if (file.schemaVersion !== 1 || file.source !== "vinmonopolet/my-products/v1/stock-per-store") {
+    throw new PermanentQueueError("Daily inventory schema is not supported");
+  }
+  return {
+    schemaVersion: 1,
+    syncedAt: requiredString(file.syncedAt, "Daily inventory syncedAt"),
+    date: requiredString(file.date, "Daily inventory date"),
+    source: "vinmonopolet/my-products/v1/stock-per-store",
+    products: parseJsonObjectArray(file.products, "Daily inventory products"),
+  };
+}
 
 export async function putJson(
   bucket: R2Bucket,
   key: string,
   value: object | readonly unknown[],
-  cacheControl = "no-store",
 ): Promise<R2Object> {
   return bucket.put(key, JSON.stringify(value), {
     httpMetadata: {
       contentType: "application/json; charset=utf-8",
-      cacheControl,
+      cacheControl: "no-store",
     },
   });
 }
 
-export async function putGzipJson(
+export async function putJsonIfAbsent(
   bucket: R2Bucket,
   key: string,
   value: object | readonly unknown[],
-  cacheControl = "no-store",
-): Promise<R2Object> {
-  const source = new Blob([JSON.stringify(value)]).stream();
-  const compressed = source.pipeThrough(new CompressionStream("gzip"));
-  const object = await bucket.put(key, compressed, {
+): Promise<boolean> {
+  const object = await bucket.put(key, JSON.stringify(value), {
+    onlyIf: { etagDoesNotMatch: "*" },
     httpMetadata: {
       contentType: "application/json; charset=utf-8",
-      contentEncoding: "gzip",
-      cacheControl,
+      cacheControl: "no-store",
     },
   });
-  if (object === null) throw new Error(`R2 rejected object write: ${key}`);
-  return object;
+  return object !== null;
 }
 
-export async function getRequiredGzipJson<T>(
+export async function getOptionalJson<T>(
+  bucket: R2Bucket,
+  key: string,
+  parse: (value: unknown) => T,
+): Promise<T | null> {
+  const object = await bucket.get(key);
+  return object === null ? null : parse(await object.json<unknown>());
+}
+
+export async function getRequiredJson<T>(
   bucket: R2Bucket,
   key: string,
   parse: (value: unknown) => T,
 ): Promise<T> {
-  const object = await bucket.get(key);
-  if (object === null) throw new HttpError(503, "dataset_unavailable", "Dataset is unavailable");
-  const decompressed = object.body.pipeThrough(new DecompressionStream("gzip"));
-  return parse(await new Response(decompressed).json<unknown>());
+  const value = await getOptionalJson(bucket, key, parse);
+  if (value === null) throw new HttpError(503, "dataset_unavailable", "Dataset is unavailable");
+  return value;
 }
 
-export async function getRequiredIngestionJson<T>(
+export async function listCompletedInventoryDates(
   bucket: R2Bucket,
-  key: string,
-  parse: (value: unknown) => T,
-): Promise<T> {
-  const object = await bucket.get(key);
-  if (object === null) throw new PermanentQueueError(`Required R2 object is missing: ${key}`);
-  return parse(await object.json<unknown>());
-}
-
-export async function listRawChunkKeys(
-  bucket: R2Bucket,
-  month: string,
-  generation: string,
-): Promise<string[]> {
-  const prefix = rawChunkPrefix(month, generation);
-  const keys: string[] = [];
+): Promise<CompletedInventoryDate[]> {
+  const completed: CompletedInventoryDate[] = [];
   let cursor: string | undefined;
-
   do {
     const page = await bucket.list(
-      cursor === undefined ? { prefix, limit: 1_000 } : { prefix, cursor, limit: 1_000 },
+      cursor === undefined
+        ? { prefix: INVENTORY_PREFIX, limit: 1_000 }
+        : { prefix: INVENTORY_PREFIX, cursor, limit: 1_000 },
     );
-    keys.push(...page.objects.map(({ key }) => key));
+    for (const object of page.objects) {
+      const date = dateFromDailyInventoryKey(object.key);
+      if (date !== null) completed.push({ date, etag: object.etag, uploaded: object.uploaded });
+    }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor !== undefined);
-
-  keys.sort();
-  return keys;
-}
-
-export async function* iterateRawChunks(
-  bucket: R2Bucket,
-  month: string,
-  generation: string,
-): AsyncGenerator<RawInventoryChunk> {
-  const keys = await listRawChunkKeys(bucket, month, generation);
-  for (const key of keys) {
-    yield await getRequiredIngestionJson(bucket, key, parseRawInventoryChunk);
-  }
+  return completed.sort((left, right) => left.date.localeCompare(right.date));
 }

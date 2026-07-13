@@ -3,8 +3,6 @@ import { z } from "zod";
 
 import {
   AdminAcceptedResponseSchema,
-  AdminBackfillRequestSchema,
-  AdminSyncRequestSchema,
   ApiErrorResponseSchema,
   CatalogResponseSchema,
   DailyInventorySchema,
@@ -51,6 +49,7 @@ const freshness = {
   datasetGeneratedAt: "2026-07-12T08:30:00.000Z",
   sourceWatermark: 8_089_764,
   coveredThrough: "2026-07-12",
+  availableDates: ["2026-07-11", "2026-07-12"],
   missingMonths: ["2024-03"],
 };
 
@@ -142,6 +141,12 @@ describe("entity and inventory schemas", () => {
     expect(
       FreshnessSchema.safeParse({ ...freshness, datasetGeneratedAt: "2026-07-12 08:30:00" })
         .success,
+    ).toBe(false);
+    expect(
+      FreshnessSchema.safeParse({
+        ...freshness,
+        availableDates: ["2026-07-12", "2026-07-12"],
+      }).success,
     ).toBe(false);
   });
 
@@ -281,119 +286,32 @@ describe("catalog and status schemas", () => {
 describe("queue messages", () => {
   const base = {
     version: 1 as const,
-    jobId: "job-2026-07",
+    type: "start-sync" as const,
     trigger: "manual" as const,
-    month: "2026-07",
-    generation: "generation-01",
+    date: "2026-07-13",
   };
 
-  it.each([
-    { phase: "extract", cursorId: 12, ceilingId: 9_000_000 },
-    { phase: "project-inventory", date: "2026-07-12" },
-    { phase: "publish" },
-    { phase: "refresh-catalogs" },
-  ] as const)("accepts a $phase message", (phaseFields) => {
-    const parsed = SyncQueueMessageSchema.parse({ ...base, ...phaseFields });
-    expect(parsed.phase).toBe(phaseFields.phase);
+  it("accepts the one start-sync message", () => {
+    const parsed = SyncQueueMessageSchema.parse(base);
+    expect(parsed).toEqual(base);
     expectTypeOf(parsed).toMatchTypeOf<SyncQueueMessage>();
   });
 
-  it("requires an ordered historic range for bootstrap bounds", () => {
-    expect(
-      SyncQueueMessageSchema.parse({
-        ...base,
-        trigger: "backfill",
-        phase: "bootstrap-bounds",
-        fromMonth: "2026-01",
-        throughMonth: "2026-07",
-      }),
-    ).toMatchObject({ phase: "bootstrap-bounds", fromMonth: "2026-01" });
-
-    expect(SyncQueueMessageSchema.safeParse({ ...base, phase: "bootstrap-bounds" }).success).toBe(
+  it("rejects invalid queue metadata", () => {
+    expect(SyncQueueMessageSchema.safeParse({ ...base, version: 2 }).success).toBe(false);
+    expect(SyncQueueMessageSchema.safeParse({ ...base, trigger: "unknown" }).success).toBe(false);
+    expect(SyncQueueMessageSchema.safeParse({ ...base, type: "sync-wine" }).success).toBe(false);
+    expect(SyncQueueMessageSchema.safeParse({ ...base, password: "unexpected" }).success).toBe(
       false,
     );
-    expect(
-      SyncQueueMessageSchema.safeParse({
-        ...base,
-        phase: "bootstrap-bounds",
-        fromMonth: "2026-07",
-        throughMonth: "2026-01",
-      }).success,
-    ).toBe(false);
-  });
-
-  it("keeps bootstrap range fields off all other phases", () => {
-    expect(
-      SyncQueueMessageSchema.safeParse({
-        ...base,
-        phase: "extract",
-        fromMonth: "2024-01",
-        throughMonth: "2026-07",
-      }).success,
-    ).toBe(false);
-  });
-
-  it("accepts the same bounded range for a destructive reload", () => {
-    expect(
-      SyncQueueMessageSchema.parse({
-        ...base,
-        trigger: "backfill",
-        phase: "reset",
-        fromMonth: "2026-01",
-        throughMonth: "2026-07",
-      }),
-    ).toMatchObject({ phase: "reset", fromMonth: "2026-01" });
-  });
-
-  it("rejects invalid queue metadata", () => {
-    expect(
-      SyncQueueMessageSchema.safeParse({ ...base, version: 2, phase: "publish" }).success,
-    ).toBe(false);
-    expect(
-      SyncQueueMessageSchema.safeParse({ ...base, trigger: "unknown", phase: "publish" }).success,
-    ).toBe(false);
-    expect(
-      SyncQueueMessageSchema.safeParse({ ...base, phase: "extract", cursorId: -1 }).success,
-    ).toBe(false);
-    expect(
-      SyncQueueMessageSchema.safeParse({ ...base, phase: "publish", password: "unexpected" })
-        .success,
-    ).toBe(false);
   });
 });
 
 describe("admin and error contracts", () => {
-  it("validates explicit sync month requests", () => {
-    expect(AdminSyncRequestSchema.parse({ months: ["2024-01", "2024-02"] })).toEqual({
-      months: ["2024-01", "2024-02"],
-    });
-    expect(AdminSyncRequestSchema.safeParse({ months: [] }).success).toBe(false);
-    expect(AdminSyncRequestSchema.safeParse({ months: ["2024-01", "2024-01"] }).success).toBe(
-      false,
-    );
-    expect(
-      AdminSyncRequestSchema.safeParse({
-        months: Array.from({ length: 101 }, (_, index) => `2024-${index}`),
-      }).success,
-    ).toBe(false);
-  });
-
-  it("validates optional ordered backfill bounds", () => {
-    expect(AdminBackfillRequestSchema.parse({})).toEqual({});
-    expect(
-      AdminBackfillRequestSchema.parse({ fromMonth: "2024-01", throughMonth: "2026-07" }),
-    ).toEqual({ fromMonth: "2024-01", throughMonth: "2026-07" });
-    expect(
-      AdminBackfillRequestSchema.safeParse({ fromMonth: "2026-07", throughMonth: "2024-01" })
-        .success,
-    ).toBe(false);
-  });
-
   it("validates accepted responses", () => {
     const response = {
-      jobId: "job-1",
       status: "queued" as const,
-      months: ["2026-06", "2026-07"],
+      date: "2026-07-13",
     };
     expect(AdminAcceptedResponseSchema.parse(response)).toEqual(response);
     expectTypeOf<AdminAcceptedResponse>().toMatchTypeOf<typeof response>();

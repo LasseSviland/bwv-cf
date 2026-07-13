@@ -1,22 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MONOPOLIES_KEY,
+  WINES_KEY,
   dailyInventoryKey,
-  generationPrefix,
-  rawChunkKey,
-  rawChunkPrefix,
+  dateFromDailyInventoryKey,
 } from "../src/storage/keys";
 
 describe("R2 keys", () => {
-  it("uses one gzip JSON object for all inventory on a date", () => {
-    expect(dailyInventoryKey("2026-07-12", "gen")).toBe(
-      "datasets/v1/month=2026-07/generation=gen/inventory/2026-07-12.json.gz",
-    );
+  it("uses one stable catalog file for each catalog", () => {
+    expect(WINES_KEY).toBe("catalogs/wines.json");
+    expect(MONOPOLIES_KEY).toBe("catalogs/monopolies.json");
   });
 
-  it("keeps generation-scoped inventory and transient chunks", () => {
-    expect(generationPrefix("2026-07", "gen")).toBe("datasets/v1/month=2026-07/generation=gen");
-    expect(rawChunkPrefix("2026-07", "gen")).toBe("staging/v1/month=2026-07/generation=gen/raw/");
-    expect(rawChunkKey("2026-07", "gen", 12, 345)).toContain("000000000012-000000000345.json");
+  it("uses exactly one inventory file per day", () => {
+    expect(dailyInventoryKey("2026-07-13")).toBe("inventory/2026-07-13.json");
+    expect(dateFromDailyInventoryKey("inventory/2026-07-13.json")).toBe("2026-07-13");
+    expect(dateFromDailyInventoryKey("inventory/not-a-date.json")).toBeNull();
   });
 });

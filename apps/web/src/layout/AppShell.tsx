@@ -6,6 +6,7 @@ const navItems = [
   { to: "/", label: "Statistics", end: true },
   { to: "/wines", label: "Wines" },
   { to: "/monopolies", label: "Monopolies" },
+  { to: "/settings", label: "Settings" },
 ] as const;
 
 export interface AppShellOutletContext {

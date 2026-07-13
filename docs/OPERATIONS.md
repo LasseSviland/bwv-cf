@@ -3,47 +3,59 @@
 ## Initial release
 
 1. Install dependencies, generate bindings, and run `pnpm check`.
-2. Apply D1 migrations with `pnpm d1:migrate:remote`.
-3. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route.
-4. Configure `API_KEY` with `wrangler secret put API_KEY`.
-5. Verify authenticated health, status, catalog, and SPA password-gate behavior on `workers.dev`.
-6. Start the historical load through `POST /api/v1/admin/reload`. The fixed range is `2026-01` through the current Oslo month.
-7. Poll `GET /api/v1/admin/jobs/:jobId` and `/api/v1/status` until every expected month is published.
-8. Reconcile sampled wine/store counts with the source MySQL snapshots.
-9. Add the reversible `bwv.sviland.net/*` Worker route in front of the existing proxied hostname, then repeat desktop and mobile smoke tests.
+2. Create the R2 bucket, Queue, and DLQ named in `wrangler.jsonc` if they do not already exist.
+3. Configure `API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` with `wrangler secret put <NAME>`.
+4. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route.
+5. Verify the SPA password gate plus authenticated `/api/v1/health` and `/api/v1/status` responses.
+6. Open Settings and select **Sync inventories now**.
+7. Verify `catalogs/wines.json`, `catalogs/monopolies.json`, and the current `inventory/YYYY-MM-DD.json` in R2.
+8. Reconcile sampled products, stores, and stock with the Vinmonopolet responses.
+9. Add the reversible `bwv.sviland.net/*` Worker route and repeat desktop and mobile smoke tests.
 
-Each Queue message and continuation contains its `YYYY-MM` month. Queue delivery is at least once; deterministic R2 keys and D1 phase/cursor checkpoints make duplicate delivery harmless. The Queue consumer is deliberately limited to one concurrent, one-message batch and performs sequential MySQL queries.
+No historical database migration or destructive R2 reload belongs to the initial release.
 
-Extraction uses 5,000-row primary-key pages. This was raised from the initial 1,000-row production burn-in only after hundreds of sequential pages completed without source or query errors; database queries remain single-concurrency.
+## Daily sync
 
-Raw inventory extraction chunks live under `staging/v1/`. The production R2 bucket has a lifecycle rule named `expire-sync-staging` that removes those temporary objects after seven days. Published inventory lives at `datasets/v1/month=YYYY-MM/generation=.../inventory/YYYY-MM-DD.json.gz`: one gzip JSON file contains every positive Better Wines inventory relation for that date. Wines and monopolies are stored in D1, not R2.
+The `15 7 * * *` Cron Trigger fires at 07:15 UTC and enqueues exactly one `start-sync` message. The same message is sent by the Settings button. The Queue consumer has a batch size of one and maximum concurrency of one.
 
-Every production deployment calls `/admin/reload` after smoke testing. The reload clears current D1 application data and all R2 objects before rebuilding from MySQL, so read APIs can return `503 dataset_unavailable` until the new backfill publishes data. GitHub Actions needs `BWV_API_KEY`, matching the Worker's `API_KEY` secret, to authorize this step.
+The consumer performs these steps sequentially:
 
-## Routine refresh
+1. Fetch and merge the complete Better Wines product catalog.
+2. Fetch and merge the complete Vinmonopolet store catalog.
+3. If today's daily inventory object is absent, fetch all stock and write one object for the entire response.
 
-The `0 */6 * * *` Cron Trigger queues the current and immediately previous Oslo month. Both are rebuilt from their conservative source-ID floors through a captured ceiling, so inserts, updates, and deletions in the known recent range are reflected. Archived months stay immutable unless explicitly replayed.
+Catalog records are keyed by product or store ID. New data wins, nested fields omitted by the new response are retained, and source records that disappear remain in the catalog. The inventory object uses a conditional create, so duplicate Queue delivery cannot overwrite an already captured day.
 
-Use `POST /api/v1/admin/sync` to replay one month. Use `/admin/refresh` to enqueue the normal two-month set. Active work for the same month is coalesced.
+## Manual regeneration
+
+The normal manual operation is the Settings button or:
+
+```bash
+curl --fail --request POST \
+  --header "Authorization: Bearer $API_KEY" \
+  https://bwv.sviland.net/api/v1/admin/sync-inventories
+```
+
+To regenerate a day's inventory, delete only `inventory/YYYY-MM-DD.json`, then trigger the sync. Wines and stores are fetched and merged on every invocation regardless of whether the daily inventory object exists.
+
+Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and triggering a sync reconstructs that catalog from the current API response. Because deleted source records can only be retained by merging with the prior file, deleting a catalog intentionally discards that retained history.
 
 ## Failures and recovery
 
-- Inspect structured Worker logs by `jobId`, `month`, and `phase`.
-- Transient failures retry with bounded backoff and then move to `better-wines-viner-sync-dlq`.
-- A failed generation never replaces `published_months`; readers continue using the prior complete generation.
-- Replay the failed month after correcting the dependency. Publication writes every daily gzip object first and changes the D1 month generation pointer last.
-- Routine refreshes retain older R2 generations until the next deployment reload clears the bucket. Roll back code with Wrangler; a deployment reload intentionally rebuilds data instead of preserving the old dataset.
-
-An old, low-ID source row whose `date` is later moved into a recent month cannot be discovered cheaply because the legacy database has no date index. If source evidence shows this behavior, run a controlled full reconciliation rather than relying on the recent month floor.
+- Inspect structured Worker logs by date, trigger, and phase.
+- Invalid or permanent API failures are acknowledged and logged; transient failures retry and eventually move to `better-wines-viner-sync-dlq`.
+- A failed product or store fetch leaves the previous catalog object intact.
+- A failed stock fetch leaves the day absent, so a later scheduled or manual message can retry it.
+- After correcting a dependency, use the Settings button to replay the complete operation.
+- If the DLQ contains a message, retry by triggering a fresh sync after the cause is fixed.
 
 ## Secrets and rotation
 
-- Never print, commit, or place `API_KEY` or database credentials in command arguments that are logged.
-- Production MySQL credentials live only in Hyperdrive and have table-scoped `SELECT` grants.
-- The RDS regional CA is attached to Hyperdrive with identity verification.
-- Rotate `API_KEY` interactively with `wrangler secret put API_KEY`, then sign in again in the SPA.
-- Rotate the database reader by creating a replacement SELECT-only account, updating Hyperdrive, validating a sync, and only then removing the old reader.
+- Never print, commit, or place secret values in logged command arguments.
+- Rotate `API_KEY` with `wrangler secret put API_KEY`, then sign in again in the SPA.
+- Rotate either Vinmonopolet subscription key with its matching `wrangler secret put` command, verify a manual sync, and then revoke the previous key.
+- Keep the GitHub `CLOUDFLARE_API_TOKEN` scoped to the resources required for deployment.
 
 ## Rollback
 
-Use `wrangler versions list` and `wrangler rollback <VERSION_ID>` for Worker code. Removing the `bwv.sviland.net/*` route immediately restores the prior origin without changing its DNS record. A Wrangler rollback does not itself run the destructive reload workflow.
+Use `wrangler versions list` and `wrangler rollback <VERSION_ID>` for Worker code. A Worker rollback does not modify R2. Removing the `bwv.sviland.net/*` route immediately restores the prior origin without changing its DNS record.

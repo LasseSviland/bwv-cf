@@ -21,9 +21,7 @@
     "test:watch": "pnpm -r --parallel --if-present run test:watch",
     "typecheck": "pnpm -r --if-present typecheck",
     "types": "wrangler types",
-    "types:check": "wrangler types --check",
-    "d1:migrate:local": "wrangler d1 migrations apply better-wines-viner-state --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply better-wines-viner-state --remote"
+    "types:check": "wrangler types --check"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "latest",

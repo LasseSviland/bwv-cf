@@ -1,146 +1,40 @@
-import type { RowDataPacket } from "mysql2";
+export type JsonPrimitive = boolean | number | string | null;
+export type JsonValue = JsonObject | JsonPrimitive | JsonValue[];
 
-import type { SyncQueueMessage } from "@bwv/contracts";
-
-export interface InventorySourceRow extends RowDataPacket {
-  id: number;
-  date: number;
-  count: number;
-  wineId: number;
-  monopolyId: number;
+export interface JsonObject {
+  [key: string]: JsonValue;
 }
 
-export interface SourceBoundRow extends RowDataPacket {
-  monthKey: number;
-  floorId: number | null;
-  ceilingId: number | null;
-  sourceRowCount: number;
-}
-
-export interface ScalarIdRow extends RowDataPacket {
-  id: number | null;
-}
-
-export interface WineSourceRow extends RowDataPacket {
-  id: number;
-  productNumber: string;
-  name: string;
-  country: string | null;
-  wineCategory: string | null;
-}
-
-export interface MonopolySourceRow extends RowDataPacket {
-  id: number;
-  storeNumber: string;
-  name: string;
-  postalCode: string | null;
-  city: string | null;
-  monopolyCategory: string | null;
-}
-
-export interface RawInventoryChunk {
+export interface MonopolyCatalogFile {
   schemaVersion: 1;
-  month: string;
-  generation: string;
-  cursorFrom: number;
-  cursorThrough: number;
-  rows: InventorySourceRowData[];
+  syncedAt: string;
+  source: "vinmonopolet/stores/v0/details";
+  monopolies: JsonObject[];
 }
 
-export interface InventorySourceRowData {
-  id: number;
-  date: number;
-  count: number;
-  wineId: number;
-  monopolyId: number;
+export interface WineCatalogFile {
+  schemaVersion: 1;
+  syncedAt: string;
+  source: "vinmonopolet/my-products/v1/details-normal";
+  wholesaler: "Better Wines AS";
+  wines: JsonObject[];
 }
 
-export interface DailyInventorySnapshotRow {
-  wineId: number;
-  monopolyId: number;
-  count: number;
-}
-
-export interface DailyInventorySnapshot {
-  schemaVersion: 2;
+export interface DailyInventoryFile {
+  schemaVersion: 1;
+  syncedAt: string;
   date: string;
-  generation: string;
-  inventory: DailyInventorySnapshotRow[];
+  source: "vinmonopolet/my-products/v1/stock-per-store";
+  products: JsonObject[];
 }
 
-export interface MonthManifest {
-  schemaVersion: 2;
-  month: string;
-  generation: string;
-  generatedAt: string;
-  coveredFrom: string;
-  coveredThrough: string;
-  sourceFloorId: number;
-  sourceWatermark: number;
-  sourceRowCount: number;
-  inventoryObjectCount: number;
-}
-
-export interface PublishedMonthRow {
-  month: string;
-  generation: string;
-  manifestKey: string;
-  generatedAt: string;
-  coveredFrom: string;
-  coveredThrough: string;
-  sourceFloorId: number;
-  sourceWatermark: number;
-  sourceRowCount: number;
-  inventoryObjectCount: number;
+export interface CompletedInventoryDate {
+  date: string;
   etag: string;
-  publishedAt: string;
-}
-
-export interface MonthSyncRow {
-  jobId: string;
-  month: string;
-  generation: string;
-  status: string;
-  phase: string;
-  cursorId: number | null;
-  floorId: number | null;
-  ceilingId: number | null;
-  rowsScanned: number;
-  rowsKept: number;
-  inventoryObjectCount: number;
-  coveredFrom: string | null;
-  coveredThrough: string | null;
-  sourceWatermark: number | null;
-  manifestKey: string | null;
-  error: string | null;
-  createdAt: string;
-  updatedAt: string;
-  completedAt: string | null;
-}
-
-export interface SyncRunRow {
-  id: string;
-  trigger: SyncQueueMessage["trigger"];
-  status: string;
-  fromMonth: string;
-  throughMonth: string;
-  totalMonths: number;
-  succeededMonths: number;
-  failedMonths: number;
-  requestedAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-  error: string | null;
-}
-
-export interface CatalogStateRow {
-  generation: string;
-  generatedAt: string;
-  wineCount: number;
-  monopolyCount: number;
+  uploaded: Date;
 }
 
 export interface QueueProcessResult {
-  message: SyncQueueMessage;
-  outcome: "completed" | "duplicate" | "skipped";
+  outcome: "completed" | "skipped";
+  detail: string;
 }

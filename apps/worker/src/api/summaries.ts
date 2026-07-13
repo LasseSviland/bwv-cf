@@ -7,12 +7,11 @@ import type {
   WineCatalogItem,
   WineSummary,
 } from "@bwv/contracts";
-import { monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
-import { getPublishedMonths } from "../storage/d1";
-import type { DailyInventorySnapshot } from "../types";
-import { coveredDates, loadDailyInventory } from "./daily-inventory";
+import { getWineCatalog } from "../ingestion/catalogs";
+import type { InventoryObservation } from "./daily-inventory";
+import { getCompletedDates, loadInventoryObservations } from "./daily-inventory";
 
 export interface RelatedInventory {
   relatedId: number;
@@ -58,21 +57,29 @@ export function summarizeAvailability(
   };
 }
 
-function indexSnapshots(
-  snapshots: readonly DailyInventorySnapshot[],
+function numericId(value: string): number {
+  const parsed = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(parsed)) {
+    throw new HttpError(503, "dataset_invalid", `Inventory references invalid id ${value}`);
+  }
+  return parsed;
+}
+
+function indexObservations(
+  observations: readonly InventoryObservation[],
   primary: "wine" | "monopoly",
 ): Map<number, Map<number, DailyInventory[]>> {
   const indexed = new Map<number, Map<number, DailyInventory[]>>();
-  for (const snapshot of snapshots) {
-    for (const row of snapshot.inventory) {
-      const primaryId = primary === "wine" ? row.wineId : row.monopolyId;
-      const relatedId = primary === "wine" ? row.monopolyId : row.wineId;
-      const related = indexed.get(primaryId) ?? new Map<number, DailyInventory[]>();
-      const inventory = related.get(relatedId) ?? [];
-      inventory.push({ date: snapshot.date, count: row.count });
-      related.set(relatedId, inventory);
-      indexed.set(primaryId, related);
-    }
+  for (const observation of observations) {
+    const wineId = numericId(observation.productId);
+    const monopolyId = numericId(observation.storeId);
+    const primaryId = primary === "wine" ? wineId : monopolyId;
+    const relatedId = primary === "wine" ? monopolyId : wineId;
+    const related = indexed.get(primaryId) ?? new Map<number, DailyInventory[]>();
+    const inventory = related.get(relatedId) ?? [];
+    inventory.push({ date: observation.date, count: observation.count });
+    related.set(relatedId, inventory);
+    indexed.set(primaryId, related);
   }
   return indexed;
 }
@@ -87,13 +94,14 @@ function entriesFor(
   }));
 }
 
-async function summaryContext(env: Env, period: Period) {
-  const published = await getPublishedMonths(env.DB, monthsForPeriod(period));
-  if (published.length === 0) {
-    throw new HttpError(503, "dataset_unavailable", "No requested dataset month is available");
+async function summaryContext(env: Env, period: Period, productIds: readonly string[]) {
+  const completed = await getCompletedDates(env.DATA_BUCKET, period);
+  if (completed.length === 0) {
+    throw new HttpError(503, "dataset_unavailable", "No requested inventory date is available");
   }
-  const snapshots = await loadDailyInventory(env.DATA_BUCKET, period, published);
-  return { knownDates: coveredDates(period, published), snapshots };
+  const knownDates = completed.map(({ date }) => date);
+  const observations = await loadInventoryObservations(env.DATA_BUCKET, knownDates, productIds);
+  return { knownDates, observations };
 }
 
 export async function summarizeWines(
@@ -101,8 +109,12 @@ export async function summarizeWines(
   wines: readonly WineSummary[],
   period: Period,
 ): Promise<WineCatalogItem[]> {
-  const { knownDates, snapshots } = await summaryContext(env, period);
-  const index = indexSnapshots(snapshots, "wine");
+  const { knownDates, observations } = await summaryContext(
+    env,
+    period,
+    wines.map(({ productNumber }) => productNumber),
+  );
+  const index = indexObservations(observations, "wine");
   return wines.map((wine) => ({
     ...wine,
     availability: summarizeAvailability(entriesFor(index, wine.id), knownDates),
@@ -114,8 +126,13 @@ export async function summarizeMonopolies(
   monopolies: readonly MonopolySummary[],
   period: Period,
 ): Promise<MonopolyCatalogItem[]> {
-  const { knownDates, snapshots } = await summaryContext(env, period);
-  const index = indexSnapshots(snapshots, "monopoly");
+  const wines = await getWineCatalog(env);
+  const { knownDates, observations } = await summaryContext(
+    env,
+    period,
+    wines.map(({ productNumber }) => productNumber),
+  );
+  const index = indexObservations(observations, "monopoly");
   return monopolies.map((monopoly) => ({
     ...monopoly,
     availability: summarizeAvailability(entriesFor(index, monopoly.id), knownDates),

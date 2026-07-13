@@ -108,18 +108,17 @@ describe("API contract validation", () => {
     }
   });
 
-  it("queues a full historical backfill through the authenticated admin API", async () => {
+  it("queues today's inventory sync through the authenticated admin API", async () => {
     const fetchMock = mockFetch({
-      jobId: "job-123",
       status: "queued",
-      months: ["2024-01", "2024-02"],
+      date: "2026-07-13",
     });
 
-    await expect(api.startHistoricalBackfill("session-key")).resolves.toMatchObject({
-      jobId: "job-123",
+    await expect(api.startInventorySync("session-key")).resolves.toMatchObject({
       status: "queued",
+      date: "2026-07-13",
     });
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/admin/backfill");
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST", body: "{}" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/admin/sync-inventories");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 });

@@ -4,6 +4,7 @@ import { HomePage } from "./pages/HomePage";
 import { MonopoliesPage } from "./pages/MonopoliesPage";
 import { MonopolyDetailPage } from "./pages/MonopolyDetailPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { WineDetailPage } from "./pages/WineDetailPage";
 import { WinesPage } from "./pages/WinesPage";
 
@@ -15,6 +16,7 @@ export const AppRoutes = () => (
       <Route path="wines/:wineId" element={<WineDetailPage />} />
       <Route path="monopolies" element={<MonopoliesPage />} />
       <Route path="monopolies/:monopolyId" element={<MonopolyDetailPage />} />
+      <Route path="settings" element={<SettingsPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Route>
   </Routes>

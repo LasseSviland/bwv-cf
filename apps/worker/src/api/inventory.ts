@@ -5,40 +5,48 @@ import type {
   Period,
   WineInventoryResponse,
 } from "@bwv/contracts";
-import { mergeAndZeroFillInventorySeries, monthsForPeriod } from "@bwv/data-format";
+import { monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
 import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
-import { getPublishedMonths } from "../storage/d1";
-import type { PublishedMonthRow } from "../types";
-import { loadDailyInventory } from "./daily-inventory";
+import type { CompletedInventoryDate } from "../types";
+import { getCompletedDates, loadInventoryObservations } from "./daily-inventory";
 
-function freshnessFor(
-  requestedMonths: readonly string[],
-  published: readonly PublishedMonthRow[],
-): Freshness {
-  if (published.length === 0) {
-    throw new HttpError(503, "dataset_unavailable", "No requested dataset month is available");
+function freshnessFor(period: Period, completed: readonly CompletedInventoryDate[]): Freshness {
+  const latest = completed.at(-1);
+  if (latest === undefined) {
+    throw new HttpError(503, "dataset_unavailable", "No requested inventory date is available");
   }
-  const available = new Set(published.map(({ month }) => month));
-  const missingMonths = requestedMonths.filter((month) => !available.has(month));
-  const datasetGeneratedAt = published
-    .map(({ generatedAt }) => generatedAt)
-    .sort()
-    .at(-1);
-  const coveredThrough = published
-    .map((month) => month.coveredThrough)
-    .sort()
-    .at(-1);
-  if (datasetGeneratedAt === undefined || coveredThrough === undefined) {
-    throw new HttpError(503, "dataset_unavailable", "Dataset freshness is unavailable");
-  }
+  const requestedMonths = monthsForPeriod(period);
+  const availableMonths = new Set(completed.map(({ date }) => date.slice(0, 7)));
+  const missingMonths = requestedMonths.filter((month) => !availableMonths.has(month));
   return {
-    datasetGeneratedAt,
-    sourceWatermark: Math.max(...published.map(({ sourceWatermark }) => sourceWatermark)),
-    coveredThrough,
+    datasetGeneratedAt: latest.uploaded.toISOString(),
+    sourceWatermark: latest.uploaded.getTime(),
+    coveredThrough: latest.date,
+    availableDates: completed.map(({ date }) => date),
     ...(missingMonths.length > 0 ? { missingMonths } : {}),
   };
+}
+
+function zeroFillKnownDates(
+  inventory: readonly DailyInventory[],
+  knownDates: readonly string[],
+): DailyInventory[] {
+  const countByDate = new Map<string, number>();
+  for (const value of inventory) {
+    countByDate.set(value.date, (countByDate.get(value.date) ?? 0) + value.count);
+  }
+  return knownDates.map((date) => ({ date, count: countByDate.get(date) ?? 0 }));
+}
+
+function etagSeed(
+  kind: string,
+  id: number,
+  period: Period,
+  completed: readonly CompletedInventoryDate[],
+): string {
+  return `${kind}:${id}:${period.from}:${period.to}:${completed.map(({ etag }) => etag).join(":")}`;
 }
 
 export async function assembleWineInventory(
@@ -46,45 +54,43 @@ export async function assembleWineInventory(
   wineId: number,
   period: Period,
 ): Promise<{ etagSeed: string; response: WineInventoryResponse }> {
-  const requestedMonths = monthsForPeriod(period);
-  const [wines, monopolies, published] = await Promise.all([
+  const [wines, monopolies, completed] = await Promise.all([
     getWineCatalog(env),
     getMonopolyCatalog(env),
-    getPublishedMonths(env.DB, requestedMonths),
+    getCompletedDates(env.DATA_BUCKET, period),
   ]);
   const wine = wines.find(({ id }) => id === wineId);
   if (wine === undefined) throw new HttpError(404, "wine_not_found", "Wine was not found");
-  const monopolyById = new Map(monopolies.map((monopoly) => [monopoly.id, monopoly]));
+  const monopolyByStoreNumber = new Map(
+    monopolies.map((monopoly) => [monopoly.storeNumber, monopoly]),
+  );
   const series = new Map<number, DailyInventory[]>();
-  for (const snapshot of await loadDailyInventory(env.DATA_BUCKET, period, published)) {
-    for (const row of snapshot.inventory) {
-      if (row.wineId !== wineId) continue;
-      const values = series.get(row.monopolyId) ?? [];
-      values.push({ date: snapshot.date, count: row.count });
-      series.set(row.monopolyId, values);
-    }
+  const knownDates = completed.map(({ date }) => date);
+  const observations = await loadInventoryObservations(env.DATA_BUCKET, knownDates, [
+    wine.productNumber,
+  ]);
+  for (const observation of observations) {
+    const monopoly = monopolyByStoreNumber.get(observation.storeId);
+    if (monopoly === undefined) continue;
+    const values = series.get(monopoly.id) ?? [];
+    values.push({ date: observation.date, count: observation.count });
+    series.set(monopoly.id, values);
   }
+
   const response: WineInventoryResponse = {
-    ...freshnessFor(requestedMonths, published),
+    ...freshnessFor(period, completed),
     wine,
     period,
     monopolies: [...series.entries()]
-      .map(([monopolyId, inventory]) => {
-        const monopoly = monopolyById.get(monopolyId);
-        if (monopoly === undefined) {
-          throw new HttpError(503, "dataset_invalid", "Dataset references an unknown monopoly");
-        }
-        return {
-          monopoly,
-          inventory: mergeAndZeroFillInventorySeries([inventory], period, { maxDays: 366 }),
-        };
+      .flatMap(([monopolyId, inventory]) => {
+        const monopoly = monopolies.find(({ id }) => id === monopolyId);
+        return monopoly === undefined
+          ? []
+          : [{ monopoly, inventory: zeroFillKnownDates(inventory, knownDates) }];
       })
       .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb-NO")),
   };
-  return {
-    response,
-    etagSeed: `wine:${wineId}:${period.from}:${period.to}:${published.map((row) => row.etag).join(":")}`,
-  };
+  return { response, etagSeed: etagSeed("wine", wineId, period, completed) };
 }
 
 export async function assembleMonopolyInventory(
@@ -92,46 +98,44 @@ export async function assembleMonopolyInventory(
   monopolyId: number,
   period: Period,
 ): Promise<{ etagSeed: string; response: MonopolyInventoryResponse }> {
-  const requestedMonths = monthsForPeriod(period);
-  const [wines, monopolies, published] = await Promise.all([
+  const [wines, monopolies, completed] = await Promise.all([
     getWineCatalog(env),
     getMonopolyCatalog(env),
-    getPublishedMonths(env.DB, requestedMonths),
+    getCompletedDates(env.DATA_BUCKET, period),
   ]);
   const monopoly = monopolies.find(({ id }) => id === monopolyId);
   if (monopoly === undefined) {
     throw new HttpError(404, "monopoly_not_found", "Monopoly was not found");
   }
-  const wineById = new Map(wines.map((wine) => [wine.id, wine]));
+  const wineByProductNumber = new Map(wines.map((wine) => [wine.productNumber, wine]));
   const series = new Map<number, DailyInventory[]>();
-  for (const snapshot of await loadDailyInventory(env.DATA_BUCKET, period, published)) {
-    for (const row of snapshot.inventory) {
-      if (row.monopolyId !== monopolyId) continue;
-      const values = series.get(row.wineId) ?? [];
-      values.push({ date: snapshot.date, count: row.count });
-      series.set(row.wineId, values);
-    }
+  const knownDates = completed.map(({ date }) => date);
+  const observations = await loadInventoryObservations(
+    env.DATA_BUCKET,
+    knownDates,
+    wines.map(({ productNumber }) => productNumber),
+  );
+  for (const observation of observations) {
+    if (observation.storeId !== monopoly.storeNumber) continue;
+    const wine = wineByProductNumber.get(observation.productId);
+    if (wine === undefined) continue;
+    const values = series.get(wine.id) ?? [];
+    values.push({ date: observation.date, count: observation.count });
+    series.set(wine.id, values);
   }
+
   const response: MonopolyInventoryResponse = {
-    ...freshnessFor(requestedMonths, published),
+    ...freshnessFor(period, completed),
     monopoly,
     period,
     wines: [...series.entries()]
       .flatMap(([wineId, inventory]) => {
-        const wine = wineById.get(wineId);
+        const wine = wines.find(({ id }) => id === wineId);
         return wine === undefined
           ? []
-          : [
-              {
-                wine,
-                inventory: mergeAndZeroFillInventorySeries([inventory], period, { maxDays: 366 }),
-              },
-            ];
+          : [{ wine, inventory: zeroFillKnownDates(inventory, knownDates) }];
       })
       .sort((left, right) => left.wine.name.localeCompare(right.wine.name, "nb-NO")),
   };
-  return {
-    response,
-    etagSeed: `monopoly:${monopolyId}:${period.from}:${period.to}:${published.map((row) => row.etag).join(":")}`,
-  };
+  return { response, etagSeed: etagSeed("monopoly", monopolyId, period, completed) };
 }

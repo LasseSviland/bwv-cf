@@ -1,25 +1,13 @@
-const DATASET_ROOT = "datasets/v1";
-const STAGING_ROOT = "staging/v1";
+export const MONOPOLIES_KEY = "catalogs/monopolies.json";
+export const WINES_KEY = "catalogs/wines.json";
+export const INVENTORY_PREFIX = "inventory/";
 
-export function generationPrefix(month: string, generation: string): string {
-  return `${DATASET_ROOT}/month=${month}/generation=${generation}`;
+export function dailyInventoryKey(date: string): string {
+  return `${INVENTORY_PREFIX}${date}.json`;
 }
 
-export function rawChunkPrefix(month: string, generation: string): string {
-  return `${STAGING_ROOT}/month=${month}/generation=${generation}/raw/`;
-}
-
-export function rawChunkKey(
-  month: string,
-  generation: string,
-  cursorFrom: number,
-  cursorThrough: number,
-): string {
-  const from = String(cursorFrom).padStart(12, "0");
-  const through = String(cursorThrough).padStart(12, "0");
-  return `${rawChunkPrefix(month, generation)}${from}-${through}.json`;
-}
-
-export function dailyInventoryKey(date: string, generation: string): string {
-  return `${generationPrefix(date.slice(0, 7), generation)}/inventory/${date}.json.gz`;
+export function dateFromDailyInventoryKey(key: string): string | null {
+  if (!key.startsWith(INVENTORY_PREFIX) || !key.endsWith(".json")) return null;
+  const date = key.slice(INVENTORY_PREFIX.length, -".json".length);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 }

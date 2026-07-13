@@ -1,20 +1,12 @@
 import { Hono } from "hono";
-import { z } from "zod";
 
-import { AdminBackfillRequestSchema, AdminSyncRequestSchema, type Month } from "@bwv/contracts";
-import { currentMonthInOslo, QueryPeriodError, validateQueryPeriod } from "@bwv/data-format";
+import { QueryPeriodError, validateQueryPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
 import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
-import {
-  enqueueBackfill,
-  enqueueMonths,
-  enqueueRefresh,
-  enqueueReload,
-  FIRST_HISTORIC_MONTH,
-} from "../ingestion/enqueue";
+import { enqueueManual } from "../ingestion/enqueue";
 import { logError } from "../log";
-import { getSyncRun, listMonthSyncs, listSyncRuns } from "../storage/d1";
+import { MONOPOLIES_KEY, WINES_KEY } from "../storage/keys";
 import { verifyBearerAuthorization } from "./auth";
 import {
   parseCatalogLimit,
@@ -35,22 +27,6 @@ function requestIdFor(request: Request): string {
   return request.headers.get("cf-ray") ?? crypto.randomUUID();
 }
 
-function jsonBodyLimit(request: Request): void {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength !== null && Number(contentLength) > 16_384) {
-    throw new HttpError(413, "request_too_large", "Request body is too large");
-  }
-}
-
-async function readJsonBody(request: Request): Promise<unknown> {
-  jsonBodyLimit(request);
-  try {
-    return await request.json<unknown>();
-  } catch {
-    throw new HttpError(400, "invalid_json", "Request body must be valid JSON");
-  }
-}
-
 function periodFromUrl(url: string) {
   const search = new URL(url).searchParams;
   try {
@@ -60,19 +36,6 @@ function periodFromUrl(url: string) {
       throw new HttpError(400, error.code, error.message);
     }
     throw error;
-  }
-}
-
-function validateSyncMonths(months: readonly Month[]): void {
-  const current = currentMonthInOslo();
-  for (const month of months) {
-    if (month < FIRST_HISTORIC_MONTH || month > current) {
-      throw new HttpError(
-        400,
-        "invalid_month",
-        `Sync months must be between ${FIRST_HISTORIC_MONTH} and ${current}`,
-      );
-    }
   }
 }
 
@@ -104,8 +67,15 @@ app.use("/api/v1/*", async (context, next) => {
 });
 
 app.get("/api/v1/health", async (context) => {
-  await context.env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
-  return context.json({ status: "ok", requestId: context.get("requestId") });
+  const [wines, monopolies] = await Promise.all([
+    context.env.DATA_BUCKET.head(WINES_KEY),
+    context.env.DATA_BUCKET.head(MONOPOLIES_KEY),
+  ]);
+  return context.json({
+    status: "ok",
+    catalogsReady: wines !== null && monopolies !== null,
+    requestId: context.get("requestId"),
+  });
 });
 
 app.get("/api/v1/status", async (context) => {
@@ -177,45 +147,8 @@ app.get("/api/v1/monopolies/:monopolyId", async (context) => {
   return jsonWithEtag(context.req.raw, monopoly, `monopoly-detail:${JSON.stringify(monopoly)}`);
 });
 
-app.post("/api/v1/admin/refresh", async (context) => {
-  const response = await enqueueRefresh(context.env);
-  return context.json(response, 202);
-});
-
-app.post("/api/v1/admin/reload", async (context) => {
-  return context.json(await enqueueReload(context.env), 202);
-});
-
-app.post("/api/v1/admin/sync", async (context) => {
-  const parsed = AdminSyncRequestSchema.safeParse(await readJsonBody(context.req.raw));
-  if (!parsed.success) throw new HttpError(400, "invalid_request", z.prettifyError(parsed.error));
-  validateSyncMonths(parsed.data.months);
-  return context.json(await enqueueMonths(context.env, "manual", parsed.data.months), 202);
-});
-
-app.post("/api/v1/admin/backfill", async (context) => {
-  const body =
-    context.req.raw.body === null || context.req.header("content-length") === "0"
-      ? {}
-      : await readJsonBody(context.req.raw);
-  const parsed = AdminBackfillRequestSchema.safeParse(body);
-  if (!parsed.success) throw new HttpError(400, "invalid_request", z.prettifyError(parsed.error));
-  const fromMonth = parsed.data.fromMonth ?? FIRST_HISTORIC_MONTH;
-  const throughMonth = parsed.data.throughMonth ?? currentMonthInOslo();
-  validateSyncMonths([fromMonth, throughMonth]);
-  return context.json(await enqueueBackfill(context.env, fromMonth, throughMonth), 202);
-});
-
-app.get("/api/v1/admin/jobs", async (context) => {
-  const limit = parseCatalogLimit(context.req.query("limit"));
-  return context.json({ items: await listSyncRuns(context.env.DB, limit) });
-});
-
-app.get("/api/v1/admin/jobs/:jobId", async (context) => {
-  const jobId = context.req.param("jobId");
-  const run = await getSyncRun(context.env.DB, jobId);
-  if (run === null) throw new HttpError(404, "job_not_found", "Sync job was not found");
-  return context.json({ run, months: await listMonthSyncs(context.env.DB, jobId) });
+app.post("/api/v1/admin/sync-inventories", async (context) => {
+  return context.json(await enqueueManual(context.env), 202);
 });
 
 app.notFound((context) =>

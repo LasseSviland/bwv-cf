@@ -33,7 +33,7 @@ interface InventoryMatrixProps {
   entityLabel: string;
   emptyTitle: string;
   emptyDescription: string;
-  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">;
+  freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">;
 }
 
 const dayParts = (date: ISODate) => ({

@@ -19,8 +19,7 @@ export default {
     try {
       const result = await enqueueScheduled(env, scheduledAt);
       logInfo("Scheduled sync enqueued", {
-        jobId: result.jobId,
-        months: result.months.join(","),
+        date: result.date,
         scheduledAt: scheduledAt.toISOString(),
       });
     } catch (error) {

@@ -128,6 +128,10 @@ export const FreshnessSchema = z
     datasetGeneratedAt: UtcDateTimeSchema,
     sourceWatermark: z.number().int().safe().nonnegative(),
     coveredThrough: DateStringSchema,
+    availableDates: z
+      .array(DateStringSchema)
+      .refine(hasUniqueValues, { message: "Available dates must be unique" })
+      .optional(),
     missingMonths: z
       .array(MonthSchema)
       .refine(hasUniqueValues, { message: "Missing months must be unique" })
@@ -272,129 +276,26 @@ export const StatusResponseSchema = z
   .strict();
 export type StatusResponse = z.infer<typeof StatusResponseSchema>;
 
-export const SyncTriggerSchema = z.enum(["scheduled", "manual", "backfill"]);
+export const SyncTriggerSchema = z.enum(["scheduled", "manual"]);
 export type SyncTrigger = z.infer<typeof SyncTriggerSchema>;
 
-export const SyncPhaseSchema = z.enum([
-  "reset",
-  "bootstrap-bounds",
-  "extract",
-  "project-inventory",
-  "publish",
-  "refresh-catalogs",
-]);
-export type SyncPhase = z.infer<typeof SyncPhaseSchema>;
-
-const QueuePositionSchema = z.number().int().safe().nonnegative();
-
-export const SyncQueueMessageSchema = z
+const QueueBaseSchema = z
   .object({
     version: z.literal(1),
-    jobId: z.string().min(1).max(128),
     trigger: SyncTriggerSchema,
-    month: MonthSchema,
-    generation: z.string().min(1).max(200),
-    phase: SyncPhaseSchema,
-    cursorId: QueuePositionSchema.optional(),
-    ceilingId: QueuePositionSchema.optional(),
-    date: DateStringSchema.optional(),
-    fromMonth: MonthSchema.optional(),
-    throughMonth: MonthSchema.optional(),
-  })
-  .strict()
-  .superRefine((message, context) => {
-    if (message.phase === "bootstrap-bounds" || message.phase === "reset") {
-      if (message.fromMonth === undefined) {
-        context.addIssue({
-          code: "custom",
-          message: "fromMonth is required during bootstrap-bounds",
-          path: ["fromMonth"],
-        });
-      }
-      if (message.throughMonth === undefined) {
-        context.addIssue({
-          code: "custom",
-          message: "throughMonth is required during bootstrap-bounds",
-          path: ["throughMonth"],
-        });
-      }
-      if (
-        message.fromMonth !== undefined &&
-        message.throughMonth !== undefined &&
-        message.fromMonth > message.throughMonth
-      ) {
-        context.addIssue({
-          code: "custom",
-          message: "fromMonth must not be after throughMonth",
-          path: ["throughMonth"],
-        });
-      }
-      return;
-    }
-
-    if (message.fromMonth !== undefined || message.throughMonth !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "fromMonth and throughMonth are only valid during bootstrap-bounds or reset",
-        path: [message.fromMonth !== undefined ? "fromMonth" : "throughMonth"],
-      });
-    }
-    if (message.phase === "project-inventory") {
-      if (message.date === undefined) {
-        context.addIssue({ code: "custom", message: "date is required", path: ["date"] });
-      } else if (message.date.slice(0, 7) !== message.month) {
-        context.addIssue({
-          code: "custom",
-          message: "date must belong to message month",
-          path: ["date"],
-        });
-      }
-    } else if (message.date !== undefined) {
-      context.addIssue({
-        code: "custom",
-        message: "date is only valid during project-inventory",
-        path: ["date"],
-      });
-    }
-  });
-export type SyncQueueMessage = z.infer<typeof SyncQueueMessageSchema>;
-
-export const AdminSyncRequestSchema = z
-  .object({
-    months: z
-      .array(MonthSchema)
-      .min(1)
-      .max(100)
-      .refine(hasUniqueValues, { message: "Months must be unique" }),
+    date: DateStringSchema,
   })
   .strict();
-export type AdminSyncRequest = z.infer<typeof AdminSyncRequestSchema>;
 
-export const AdminBackfillRequestSchema = z
-  .object({
-    fromMonth: MonthSchema.optional(),
-    throughMonth: MonthSchema.optional(),
-  })
-  .strict()
-  .refine(
-    ({ fromMonth, throughMonth }) =>
-      fromMonth === undefined || throughMonth === undefined || fromMonth <= throughMonth,
-    {
-      message: "fromMonth must not be after throughMonth",
-      path: ["throughMonth"],
-    },
-  );
-export type AdminBackfillRequest = z.infer<typeof AdminBackfillRequestSchema>;
+export const SyncQueueMessageSchema = QueueBaseSchema.extend({
+  type: z.literal("start-sync"),
+}).strict();
+export type SyncQueueMessage = z.infer<typeof SyncQueueMessageSchema>;
 
 export const AdminAcceptedResponseSchema = z
   .object({
-    jobId: z.string().min(1).max(128),
     status: z.literal("queued"),
-    months: z
-      .array(MonthSchema)
-      .min(1)
-      .max(100)
-      .refine(hasUniqueValues, { message: "Months must be unique" }),
+    date: DateStringSchema,
   })
   .strict();
 export type AdminAcceptedResponse = z.infer<typeof AdminAcceptedResponseSchema>;

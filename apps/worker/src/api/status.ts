@@ -1,31 +1,41 @@
 import type { Freshness, StatusResponse } from "@bwv/contracts";
 import { currentMonthInOslo, enumerateMonths } from "@bwv/data-format";
 
-import { FIRST_HISTORIC_MONTH } from "../ingestion/enqueue";
-import { getCatalogState, listPublishedMonths } from "../storage/d1";
+import { MONOPOLIES_KEY, WINES_KEY } from "../storage/keys";
+import {
+  getOptionalJson,
+  listCompletedInventoryDates,
+  parseMonopolyCatalogFile,
+  parseWineCatalogFile,
+} from "../storage/r2";
 
 export async function getStatus(env: Env): Promise<StatusResponse> {
-  const [published, catalogState] = await Promise.all([
-    listPublishedMonths(env.DB),
-    getCatalogState(env.DB),
+  const [completed, wines, monopolies] = await Promise.all([
+    listCompletedInventoryDates(env.DATA_BUCKET),
+    getOptionalJson(env.DATA_BUCKET, WINES_KEY, parseWineCatalogFile),
+    getOptionalJson(env.DATA_BUCKET, MONOPOLIES_KEY, parseMonopolyCatalogFile),
   ]);
   const catalog = {
-    wines: catalogState?.wineCount ?? 0,
-    monopolies: catalogState?.monopolyCount ?? 0,
+    wines: wines?.wines.length ?? 0,
+    monopolies: monopolies?.monopolies.length ?? 0,
   };
-  if (published.length === 0) return { freshness: null, availableMonths: [], catalog };
+  if (completed.length === 0) return { freshness: null, availableMonths: [], catalog };
 
-  const availableMonths = published.map(({ month }) => month);
+  const availableMonths = [...new Set(completed.map(({ date }) => date.slice(0, 7)))].sort();
+  const firstMonth = availableMonths[0];
+  const latest = completed.at(-1);
+  if (firstMonth === undefined || latest === undefined) {
+    return { freshness: null, availableMonths: [], catalog };
+  }
   const available = new Set(availableMonths);
-  const missingMonths = enumerateMonths(FIRST_HISTORIC_MONTH, currentMonthInOslo(), 100).filter(
+  const missingMonths = enumerateMonths(firstMonth, currentMonthInOslo(), 1_200).filter(
     (month) => !available.has(month),
   );
-  const latest = published.at(-1);
-  if (latest === undefined) return { freshness: null, availableMonths: [], catalog };
   const freshness: Freshness = {
-    datasetGeneratedAt: latest.generatedAt,
-    sourceWatermark: latest.sourceWatermark,
-    coveredThrough: latest.coveredThrough,
+    datasetGeneratedAt: latest.uploaded.toISOString(),
+    sourceWatermark: latest.uploaded.getTime(),
+    coveredThrough: latest.date,
+    availableDates: completed.map(({ date }) => date),
     ...(missingMonths.length > 0 ? { missingMonths } : {}),
   };
   return { freshness, availableMonths, catalog };

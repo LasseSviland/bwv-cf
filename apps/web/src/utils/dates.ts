@@ -98,21 +98,23 @@ export const stockDays = (inventory: DailyInventory[]): number =>
 
 export const isInventoryDateAvailable = (
   date: ISODate,
-  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">,
+  freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">,
 ): boolean =>
-  date <= freshness.coveredThrough && !freshness.missingMonths?.includes(date.slice(0, 7));
+  date <= freshness.coveredThrough &&
+  !freshness.missingMonths?.includes(date.slice(0, 7)) &&
+  (freshness.availableDates === undefined || freshness.availableDates.includes(date));
 
 export const availableDates = (
   from: ISODate,
   to: ISODate,
-  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">,
+  freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">,
 ): ISODate[] =>
   enumerateDates(from, to).filter((date) => isInventoryDateAvailable(date, freshness));
 
 export const latestAvailableDate = (
   from: ISODate,
   to: ISODate,
-  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">,
+  freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">,
 ): ISODate | null => availableDates(from, to, freshness).at(-1) ?? null;
 
 export const latestCount = (inventory: DailyInventory[], to: ISODate): number =>
@@ -122,7 +124,7 @@ export const wasSoldOutAtSomePoint = (
   inventory: DailyInventory[],
   from: ISODate,
   to: ISODate,
-  freshness: Pick<Freshness, "coveredThrough" | "missingMonths">,
+  freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">,
 ): boolean => {
   const observations = inventoryMap(inventory);
   return availableDates(from, to, freshness).some((date) => (observations.get(date) ?? 0) === 0);
