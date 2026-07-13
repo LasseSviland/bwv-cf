@@ -7,15 +7,19 @@ All endpoints are under `/api/v1` and require `Authorization: Bearer <API_KEY>`.
 - `GET /status` — R2 catalog counts and available daily inventory coverage.
 - `GET /health` — Worker and R2 catalog health without contacting Vinmonopolet.
 - `GET /wines?query=&cursor=&limit=&from=&to=` — Better Wines catalog search with per-wine inventory summaries.
-- `GET /wines/:wineId` — wine metadata derived from the raw product record.
+- `GET /wines/:wineId` — wine summary plus the complete stored product record in `sourceData`.
 - `GET /wines/:wineId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — daily stock for every store that stocked the wine during the period.
 - `GET /monopolies?query=&cursor=&limit=&from=&to=` — Vinmonopolet store search with Better Wines inventory summaries.
-- `GET /monopolies/:monopolyId` — store metadata derived from the raw store record.
+- `GET /monopolies/:monopolyId` — store summary plus the complete stored store record in `sourceData`.
 - `GET /monopolies/:monopolyId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — one bulk response containing every stocked wine and its daily series.
 
 Missing observations inside an available daily inventory file are returned as `count: 0` and mean sold out. A date without `inventory/YYYY-MM-DD.json` is unavailable, not sold out. Dates use `YYYY-MM-DD`, and default date boundaries use `Europe/Oslo`.
 
 The wine catalog contains product records whose `logistics.wholesalerName` is `Better Wines AS`. The R2 catalog and daily inventory objects retain the complete raw Vinmonopolet records; the API derives the compact UI contracts when reading them.
+
+Wine summaries expose `assortment` and `assortmentGrades`; store summaries expose `monopolyCategory`, `monopolyProfile`, and `storeAssortment`. The frontend combines these fields to reserve “sold out” for products in a store's fixed assortment. Products from a higher category, a different demand profile, or an optional range are shown as additional local products instead.
+
+Catalog and inventory endpoints deliberately return compact summaries. The two single-entity endpoints expose every JSON field retained from Vinmonopolet and the historical migration under `sourceData`; the frontend loads those larger records only when a user opens “More info”. Empty and null fields remain available through the API even when the UI omits them from the disclosure.
 
 The browser can be opened with `?apiKey=<API_KEY>`. This is a frontend bootstrap parameter only: the SPA immediately moves the value into local storage, removes it from the address bar, and continues to send credentials exclusively in the `Authorization` header.
 

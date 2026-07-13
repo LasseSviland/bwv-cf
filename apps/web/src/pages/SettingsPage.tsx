@@ -1,4 +1,4 @@
-import { Database, RefreshCw } from "lucide-react";
+import { Database, LoaderCircle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
@@ -44,8 +44,13 @@ export const SettingsPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button type="button" disabled={running || !apiKey} onClick={startSync}>
-            <RefreshCw className={running ? "animate-spin" : undefined} />
+          <Button
+            type="button"
+            disabled={running || !apiKey}
+            aria-busy={running}
+            onClick={startSync}
+          >
+            {running ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
             {running ? "Adding to queue…" : "Sync inventories now"}
           </Button>
           {message ? (

@@ -101,4 +101,49 @@ describe("InventoryMatrix", () => {
     expect(within(table).getByLabelText("11 Jul 2026: data unavailable")).toBeTruthy();
     expect(within(table).getByLabelText("12 Jul 2026: sold out")).toBeTruthy();
   });
+
+  it("marks optional local stock as additional instead of sold out", () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <InventoryMatrix
+          rows={[
+            {
+              id: "7",
+              label: "Optional Barolo",
+              secondary: "Basisutvalget · category 5R",
+              assortmentStatus: "additional",
+              assortmentNote:
+                "Not part of this store's fixed assortment (wine category 5R; store category 3R).",
+              href: "/wines/7",
+              inventory: [
+                { date: "2026-07-10", count: 2 },
+                { date: "2026-07-12", count: 0 },
+              ],
+            },
+          ]}
+          from="2026-07-10"
+          to="2026-07-12"
+          entityLabel="Wine"
+          emptyTitle="No wines"
+          emptyDescription="No inventory"
+          freshness={{ coveredThrough: "2026-07-12" }}
+        />
+      </MemoryRouter>,
+    );
+
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Additional product")).toBeTruthy();
+    expect(
+      within(table).getByLabelText("10 Jul 2026: 2 bottles in stock; additional product"),
+    ).toBeTruthy();
+    expect(
+      within(table).getByLabelText("11 Jul 2026: not currently stocked; additional product"),
+    ).toBeTruthy();
+    expect(within(table).queryByLabelText(/sold out/i)).toBeNull();
+    expect(
+      screen.getByText(
+        "Sold out is used only for the store's fixed assortment. Additional products are optional local stock.",
+      ),
+    ).toBeTruthy();
+  });
 });

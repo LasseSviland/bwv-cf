@@ -1,7 +1,11 @@
 import {
+  MonopolyDetailSchema,
   MonopolySummarySchema,
+  WineDetailSchema,
   WineSummarySchema,
+  type MonopolyDetail,
   type MonopolySummary,
+  type WineDetail,
   type WineSummary,
 } from "@bwv/contracts";
 
@@ -19,6 +23,7 @@ import {
   BETTER_WINES_WHOLESALER,
   fetchAllBetterWines,
   fetchAllMonopolies,
+  nestedArray,
   nestedString,
   wineProductId,
   type FetchFunction,
@@ -91,18 +96,43 @@ function numericId(value: string, context: string): number {
   return parsed;
 }
 
+const ASSORTMENT_GRADE_PATTERN = /^(?:SB)?[1-6][LR]?$/i;
+
+function assortmentGradesFromSource(wine: JsonObject): string[] {
+  const grades = nestedArray(wine, "assortment", "assortmentGrades").flatMap((value) => {
+    if (!isJsonObject(value)) return [];
+    const grade = nestedString(value, "assortmentGrade");
+    return grade === null ? [] : [grade.toUpperCase()];
+  });
+  if (grades.length > 0) return [...new Set(grades)];
+
+  // The migration catalog kept the legacy category in one of these fields.
+  // Retain that fallback until every stored catalog has been refreshed from Vinmonopolet.
+  const legacyCategory =
+    nestedString(wine, "legacyDatabase", "butikkategori") ??
+    nestedString(wine, "classification", "productTypeName");
+  return legacyCategory !== null && ASSORTMENT_GRADE_PATTERN.test(legacyCategory)
+    ? [legacyCategory.toUpperCase()]
+    : [];
+}
+
 export function wineSummaryFromSource(wine: JsonObject): WineSummary {
   const productNumber = wineProductId(wine);
   const name =
     nestedString(wine, "basic", "productLongName") ??
     nestedString(wine, "basic", "productShortName");
   if (name === null) throw new PermanentQueueError(`Wine ${productNumber} is missing its name`);
+  const assortmentGrades = assortmentGradesFromSource(wine);
   return WineSummarySchema.parse({
     id: numericId(productNumber, `Wine productId ${productNumber}`),
     productNumber,
     name,
     country: nestedString(wine, "origins", "origin", "country"),
-    wineCategory: nestedString(wine, "classification", "productTypeName"),
+    wineCategory: assortmentGrades.length > 0 ? assortmentGrades.join(", ") : null,
+    assortment:
+      nestedString(wine, "assortment", "assortment") ??
+      nestedString(wine, "legacyDatabase", "produktutvalg"),
+    assortmentGrades,
   });
 }
 
@@ -119,6 +149,22 @@ export function monopolySummaryFromSource(monopoly: JsonObject): MonopolySummary
     postalCode: nestedString(monopoly, "address", "postalCode"),
     city: nestedString(monopoly, "address", "city"),
     monopolyCategory: nestedString(monopoly, "category"),
+    monopolyProfile: nestedString(monopoly, "profile"),
+    storeAssortment: nestedString(monopoly, "storeAssortment"),
+  });
+}
+
+export function wineDetailFromSource(wine: JsonObject): WineDetail {
+  return WineDetailSchema.parse({
+    ...wineSummaryFromSource(wine),
+    sourceData: wine,
+  });
+}
+
+export function monopolyDetailFromSource(monopoly: JsonObject): MonopolyDetail {
+  return MonopolyDetailSchema.parse({
+    ...monopolySummaryFromSource(monopoly),
+    sourceData: monopoly,
   });
 }
 
@@ -177,4 +223,23 @@ export async function getWineCatalog(env: Env): Promise<WineSummary[]> {
 export async function getMonopolyCatalog(env: Env): Promise<MonopolySummary[]> {
   const file = await getRawMonopolyCatalog(env);
   return file.monopolies.map(monopolySummaryFromSource);
+}
+
+export async function getWineDetail(env: Env, wineId: number): Promise<WineDetail | null> {
+  const file = await getRawWineCatalog(env);
+  const wine = file.wines.find(
+    (candidate) => numericId(wineProductId(candidate), "Wine product id") === wineId,
+  );
+  return wine === undefined ? null : wineDetailFromSource(wine);
+}
+
+export async function getMonopolyDetail(
+  env: Env,
+  monopolyId: number,
+): Promise<MonopolyDetail | null> {
+  const file = await getRawMonopolyCatalog(env);
+  const monopoly = file.monopolies.find(
+    (candidate) => numericId(monopolyStoreId(candidate), "Store id") === monopolyId,
+  );
+  return monopoly === undefined ? null : monopolyDetailFromSource(monopoly);
 }

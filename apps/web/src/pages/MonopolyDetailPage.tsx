@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { InventoryMatrix, type InventoryRow } from "../components/InventoryMatrix";
 import { PageHeader } from "../components/PageHeader";
 import { PeriodPicker } from "../components/PeriodPicker";
@@ -21,6 +22,7 @@ import { Label } from "../components/ui/label";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import type { AppShellOutletContext } from "../layout/AppShell";
+import { classifyWineForStore, wineAssortmentLabel } from "../utils/assortment";
 import { latestAvailableDate, latestCount, wasSoldOutAtSomePoint } from "../utils/dates";
 
 export const MonopolyDetailPage = () => {
@@ -36,21 +38,20 @@ export const MonopolyDetailPage = () => {
   );
 
   const rows = useMemo<InventoryRow[]>(() => {
-    if (!request.data) return [];
+    const data = request.data;
+    if (!data) return [];
     const query = filter.trim().toLocaleLowerCase();
-    const sortDate =
-      latestAvailableDate(request.data.period.from, request.data.period.to, request.data) ??
-      request.data.period.to;
-    return request.data.wines
+    const sortDate = latestAvailableDate(data.period.from, data.period.to, data) ?? data.period.to;
+    return data.wines
+      .map((entry) => ({
+        ...entry,
+        assortment: classifyWineForStore(entry.wine, data.monopoly),
+      }))
       .filter(
-        ({ inventory }) =>
+        ({ inventory, assortment }) =>
           !soldOutOnly ||
-          wasSoldOutAtSomePoint(
-            inventory,
-            request.data!.period.from,
-            request.data!.period.to,
-            request.data!,
-          ),
+          (assortment.status === "required" &&
+            wasSoldOutAtSomePoint(inventory, data.period.from, data.period.to, data)),
       )
       .filter(({ wine }) =>
         query
@@ -64,9 +65,12 @@ export const MonopolyDetailPage = () => {
           latestCount(right.inventory, sortDate) - latestCount(left.inventory, sortDate);
         return stockDifference || left.wine.name.localeCompare(right.wine.name);
       })
-      .map(({ wine, inventory }) => ({
+      .map(({ wine, inventory, assortment }) => ({
         id: String(wine.id),
         label: wine.name,
+        secondary: wineAssortmentLabel(wine),
+        assortmentStatus: assortment.status,
+        assortmentNote: assortment.explanation,
         inventory,
         href: `/wines/${wine.id}?from=${period.from}&to=${period.to}`,
       }));
@@ -110,11 +114,18 @@ export const MonopolyDetailPage = () => {
     <div className="flex w-full min-w-0 flex-col gap-6">
       <PageHeader title={monopoly.name} />
 
+      <EntityMoreInfo kind="monopoly" entityId={String(monopoly.id)} label={monopoly.name} />
+
       <PeriodPicker
         period={period}
         onChange={setPeriod}
         availableMonths={status?.availableMonths}
       />
+
+      {request.loading ? <LoadingState label="Loading monopoly inventory…" /> : null}
+      {!request.loading && request.error ? (
+        <ErrorState error={request.error} onRetry={request.reload} />
+      ) : null}
 
       <div className="space-y-3">
         <Input
@@ -131,7 +142,7 @@ export const MonopolyDetailPage = () => {
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
-            Sold out at some point
+            Required products sold out at some point
           </Label>
           <span>{rows.length} wines shown</span>
         </div>
@@ -142,11 +153,19 @@ export const MonopolyDetailPage = () => {
         from={request.data.period.from}
         to={request.data.period.to}
         entityLabel="Wine"
-        emptyTitle={filter ? "No matching wines" : "No wines were stocked here"}
+        emptyTitle={
+          filter
+            ? "No matching wines"
+            : soldOutOnly
+              ? "No required products were sold out"
+              : "No wines were stocked here"
+        }
         emptyDescription={
           filter
             ? "Clear the wine filter or try another product name."
-            : "Choose another period to look for earlier or later inventory."
+            : soldOutOnly
+              ? "Products in this store's fixed assortment stayed in stock for the period."
+              : "Choose another period to look for earlier or later inventory."
         }
         freshness={freshness}
       />

@@ -82,6 +82,9 @@ describe("CatalogBrowser", () => {
       </MemoryRouter>,
     );
 
+    const loading = screen.getByRole("status");
+    expect(loading.textContent).toContain("Loading items");
+    expect(loading.querySelector(".animate-spin")).toBeTruthy();
     expect(await screen.findByText("4 results")).toBeTruthy();
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
     expect(load.mock.calls[0]?.[1]).toMatchObject({ limit: 75, cursor: undefined });

@@ -1,25 +1,25 @@
 import {
   AdminAcceptedResponseSchema,
   ApiErrorResponseSchema,
+  MonopolyDetailSchema,
   MonopolyCatalogResponseSchema,
   MonopolyInventoryResponseSchema,
-  MonopolySummarySchema,
   StatusResponseSchema,
   WineCatalogResponseSchema,
+  WineDetailSchema,
   WineInventoryResponseSchema,
-  WineSummarySchema,
 } from "@bwv/contracts";
 import type {
   AdminAcceptedResponse,
   CatalogResponse,
   MonopolyInventoryResponse,
   MonopolyCatalogItem,
-  MonopolySummary,
+  MonopolyDetail,
   Period,
   StatusResponse,
   WineInventoryResponse,
   WineCatalogItem,
-  WineSummary,
+  WineDetail,
 } from "./types";
 
 export const UNAUTHORIZED_EVENT = "better-wines:unauthorized";
@@ -155,8 +155,8 @@ export const api = {
     );
   },
 
-  getWine(apiKey: string, wineId: string, signal?: AbortSignal): Promise<WineSummary> {
-    return request(`/api/v1/wines/${encodeURIComponent(wineId)}`, apiKey, WineSummarySchema, {
+  getWine(apiKey: string, wineId: string, signal?: AbortSignal): Promise<WineDetail> {
+    return request(`/api/v1/wines/${encodeURIComponent(wineId)}`, apiKey, WineDetailSchema, {
       signal,
     });
   },
@@ -197,11 +197,11 @@ export const api = {
     );
   },
 
-  getMonopoly(apiKey: string, monopolyId: string, signal?: AbortSignal): Promise<MonopolySummary> {
+  getMonopoly(apiKey: string, monopolyId: string, signal?: AbortSignal): Promise<MonopolyDetail> {
     return request(
       `/api/v1/monopolies/${encodeURIComponent(monopolyId)}`,
       apiKey,
-      MonopolySummarySchema,
+      MonopolyDetailSchema,
       { signal },
     );
   },

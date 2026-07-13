@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { DailyInventory, Freshness, ISODate } from "../api/types";
+import type { AssortmentStatus } from "../utils/assortment";
 import {
   enumerateDates,
   formatDate,
@@ -22,6 +23,8 @@ export interface InventoryRow {
   id: string;
   label: string;
   secondary?: string;
+  assortmentStatus?: AssortmentStatus;
+  assortmentNote?: string;
   inventory: DailyInventory[];
   href: string;
 }
@@ -46,6 +49,49 @@ const dayParts = (date: ISODate) => ({
   day: String(Number(date.slice(-2))),
 });
 
+const rowStatus = (row: InventoryRow): AssortmentStatus => row.assortmentStatus ?? "required";
+
+const inventoryDescription = (
+  row: InventoryRow,
+  date: ISODate,
+  available: boolean,
+  count: number,
+): string => {
+  if (!available) return `${formatDate(date)}: data unavailable`;
+  const bottles = `${count} bottle${count === 1 ? "" : "s"} in stock`;
+  switch (rowStatus(row)) {
+    case "additional":
+      return `${formatDate(date)}: ${count > 0 ? bottles : "not currently stocked"}; additional product`;
+    case "unknown":
+      return `${formatDate(date)}: ${count > 0 ? bottles : "not currently stocked"}; assortment not classified`;
+    default:
+      return `${formatDate(date)}: ${count > 0 ? bottles : "sold out"}`;
+  }
+};
+
+const assortmentBadge = (row: InventoryRow) => {
+  const status = rowStatus(row);
+  if (status === "required") return null;
+  return (
+    <div className="mt-2 space-y-1.5">
+      <Badge
+        className={
+          status === "additional"
+            ? "bg-sky-100 text-sky-900 hover:bg-sky-100"
+            : "bg-amber-100 text-amber-900 hover:bg-amber-100"
+        }
+      >
+        {status === "additional" ? "Additional product" : "Assortment unknown"}
+      </Badge>
+      {row.assortmentNote ? (
+        <span className="block max-w-64 text-xs font-normal text-muted-foreground">
+          {row.assortmentNote}
+        </span>
+      ) : null}
+    </div>
+  );
+};
+
 export const InventoryMatrix = ({
   rows,
   from,
@@ -57,6 +103,9 @@ export const InventoryMatrix = ({
 }: InventoryMatrixProps) => {
   const dates = enumerateDates(from, to).reverse();
   const monthGroups = groupDatesByMonth(dates);
+  const showAdditional = rows.some((row) => rowStatus(row) === "additional");
+  const showUnknown = rows.some((row) => rowStatus(row) === "unknown");
+  const showAssortmentExplanation = showAdditional || showUnknown;
 
   if (rows.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} />;
@@ -65,10 +114,16 @@ export const InventoryMatrix = ({
   return (
     <section className="space-y-4" aria-label={`Daily availability by ${entityLabel}`}>
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <p className="text-sm text-muted-foreground">
-          Scroll horizontally to move through the period.
-        </p>
-        <StockLegend />
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>Scroll horizontally to move through the period.</p>
+          {showAssortmentExplanation ? (
+            <p>
+              Sold out is used only for the store's fixed assortment. Additional products are
+              optional local stock.
+            </p>
+          ) : null}
+        </div>
+        <StockLegend showAdditional={showAdditional} showUnknown={showUnknown} />
       </div>
 
       <Card
@@ -137,28 +192,42 @@ export const InventoryMatrix = ({
                         {row.secondary}
                       </span>
                     ) : null}
+                    {assortmentBadge(row)}
                   </th>
                   {dates.map((date) => {
                     const available = isInventoryDateAvailable(date, freshness);
                     const count = observations.get(date) ?? 0;
                     const inStock = count > 0;
-                    const description = available
-                      ? `${formatDate(date)}: ${inStock ? `${count} bottle${count === 1 ? "" : "s"} in stock` : "sold out"}`
-                      : `${formatDate(date)}: data unavailable`;
+                    const status = rowStatus(row);
+                    const description = inventoryDescription(row, date, available, count);
                     return (
                       <TableCell
                         key={date}
                         className={
                           !available
                             ? `h-14 min-w-11 border-r bg-muted/30 p-1 text-center text-muted-foreground${separatorClass}`
-                            : inStock
-                              ? `h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900${separatorClass}`
-                              : `h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900${separatorClass}`
+                            : status === "additional"
+                              ? `h-14 min-w-11 border-r bg-sky-100 p-1 text-center font-semibold text-sky-900${separatorClass}`
+                              : status === "unknown"
+                                ? `h-14 min-w-11 border-r bg-amber-100 p-1 text-center text-amber-900${separatorClass}`
+                                : inStock
+                                  ? `h-14 min-w-11 border-r bg-emerald-100 p-1 text-center font-semibold text-emerald-900${separatorClass}`
+                                  : `h-14 min-w-11 border-r bg-rose-100 p-1 text-center text-rose-900${separatorClass}`
                         }
                         title={description}
                         aria-label={description}
                       >
-                        <span aria-hidden="true">{available ? (inStock ? count : "—") : "?"}</span>
+                        <span aria-hidden="true">
+                          {!available
+                            ? "?"
+                            : inStock
+                              ? count
+                              : status === "additional"
+                                ? "A"
+                                : status === "unknown"
+                                  ? "i"
+                                  : "—"}
+                        </span>
                       </TableCell>
                     );
                   })}
@@ -176,6 +245,7 @@ export const InventoryMatrix = ({
           const count = latestDate ? latestCount(row.inventory, latestDate) : 0;
           const availableDays = stockDays(row.inventory);
           const observations = inventoryMap(row.inventory);
+          const status = rowStatus(row);
           return (
             <Card key={row.id}>
               <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -192,19 +262,34 @@ export const InventoryMatrix = ({
                   className={
                     !latestAvailable
                       ? "shrink-0"
-                      : count > 0
-                        ? "shrink-0 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
-                        : "shrink-0 bg-rose-100 text-rose-900 hover:bg-rose-100"
+                      : status === "additional"
+                        ? "shrink-0 bg-sky-100 text-sky-900 hover:bg-sky-100"
+                        : status === "unknown"
+                          ? "shrink-0 bg-amber-100 text-amber-900 hover:bg-amber-100"
+                          : count > 0
+                            ? "shrink-0 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+                            : "shrink-0 bg-rose-100 text-rose-900 hover:bg-rose-100"
                   }
                 >
                   {!latestAvailable
                     ? "Data unavailable"
-                    : count > 0
-                      ? `${count} in stock`
-                      : "Sold out"}
+                    : status === "additional"
+                      ? count > 0
+                        ? `Additional · ${count} in stock`
+                        : "Additional product"
+                      : status === "unknown"
+                        ? count > 0
+                          ? `Unclassified · ${count} in stock`
+                          : "Assortment unknown"
+                        : count > 0
+                          ? `${count} in stock`
+                          : "Sold out"}
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-4">
+                {status !== "required" && row.assortmentNote ? (
+                  <p className="text-xs text-muted-foreground">{row.assortmentNote}</p>
+                ) : null}
                 <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                   <span>
                     <strong className="text-foreground">{availableDays}</strong> in-stock day
@@ -224,18 +309,20 @@ export const InventoryMatrix = ({
                   {dates.map((date) => {
                     const available = isInventoryDateAvailable(date, freshness);
                     const dailyCount = observations.get(date) ?? 0;
-                    const description = available
-                      ? `${formatDate(date)}: ${dailyCount > 0 ? `${dailyCount} in stock` : "sold out"}`
-                      : `${formatDate(date)}: data unavailable`;
+                    const description = inventoryDescription(row, date, available, dailyCount);
                     return (
                       <span
                         key={date}
                         className={
                           !available
                             ? "h-5 min-w-2 flex-1 rounded-sm border border-dashed bg-muted"
-                            : dailyCount > 0
-                              ? "h-5 min-w-2 flex-1 rounded-sm bg-emerald-400"
-                              : "h-5 min-w-2 flex-1 rounded-sm bg-rose-300"
+                            : status === "additional"
+                              ? "h-5 min-w-2 flex-1 rounded-sm bg-sky-300"
+                              : status === "unknown"
+                                ? "h-5 min-w-2 flex-1 rounded-sm bg-amber-300"
+                                : dailyCount > 0
+                                  ? "h-5 min-w-2 flex-1 rounded-sm bg-emerald-400"
+                                  : "h-5 min-w-2 flex-1 rounded-sm bg-rose-300"
                         }
                         title={description}
                         aria-label={description}

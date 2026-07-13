@@ -33,7 +33,9 @@ describe("PasswordGate", () => {
       </AuthProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Welcome to Better Wines" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Enter password to access" })).toBeTruthy();
+    expect(screen.queryByText(/better wines|vinmonopolet|inventory/i)).toBeNull();
+    expect(document.title).toBe("Private access");
     await user.type(screen.getByLabelText("Access password"), "test-session-key");
     await user.click(screen.getByRole("button", { name: "Continue" }));
 

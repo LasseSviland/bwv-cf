@@ -34,6 +34,23 @@ function hasUniqueValues(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
 }
 
+export type JsonValue = boolean | number | string | null | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.boolean(),
+    z.number().finite(),
+    z.string(),
+    z.null(),
+    z.array(JsonValueSchema),
+    JsonObjectSchema,
+  ]),
+);
+export const JsonObjectSchema: z.ZodType<JsonObject> = z.record(z.string(), JsonValueSchema);
+
 /** A valid proleptic-Gregorian date serialized as YYYY-MM-DD. */
 export const DateStringSchema = z.string().refine(isCalendarDate, {
   message: "Expected a valid date in YYYY-MM-DD format",
@@ -79,6 +96,8 @@ export const WineSummarySchema = z
     name: DisplayNameSchema,
     country: z.string().trim().min(1).max(200).nullable().optional(),
     wineCategory: z.string().trim().min(1).max(100).nullable().optional(),
+    assortment: z.string().trim().min(1).max(200).nullable().optional(),
+    assortmentGrades: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   })
   .strict();
 export type WineSummary = z.infer<typeof WineSummarySchema>;
@@ -91,9 +110,21 @@ export const MonopolySummarySchema = z
     postalCode: z.string().trim().min(1).max(20).nullable().optional(),
     city: z.string().trim().min(1).max(200).nullable().optional(),
     monopolyCategory: z.string().trim().min(1).max(100).nullable().optional(),
+    monopolyProfile: z.string().trim().min(1).max(100).nullable().optional(),
+    storeAssortment: z.string().trim().min(1).max(100).nullable().optional(),
   })
   .strict();
 export type MonopolySummary = z.infer<typeof MonopolySummarySchema>;
+
+export const WineDetailSchema = WineSummarySchema.extend({
+  sourceData: JsonObjectSchema,
+}).strict();
+export type WineDetail = z.infer<typeof WineDetailSchema>;
+
+export const MonopolyDetailSchema = MonopolySummarySchema.extend({
+  sourceData: JsonObjectSchema,
+}).strict();
+export type MonopolyDetail = z.infer<typeof MonopolyDetailSchema>;
 
 export const DailyInventorySchema = z
   .object({

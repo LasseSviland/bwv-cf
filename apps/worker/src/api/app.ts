@@ -3,7 +3,12 @@ import { Hono } from "hono";
 import { QueryPeriodError, validateQueryPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
-import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
+import {
+  getMonopolyCatalog,
+  getMonopolyDetail,
+  getWineCatalog,
+  getWineDetail,
+} from "../ingestion/catalogs";
 import { enqueueManual } from "../ingestion/enqueue";
 import { logError } from "../log";
 import { MONOPOLIES_KEY, WINES_KEY } from "../storage/keys";
@@ -107,8 +112,8 @@ app.get("/api/v1/wines/:wineId/inventory", async (context) => {
 
 app.get("/api/v1/wines/:wineId", async (context) => {
   const wineId = parseEntityId(context.req.param("wineId"));
-  const wine = (await getWineCatalog(context.env)).find(({ id }) => id === wineId);
-  if (wine === undefined) throw new HttpError(404, "wine_not_found", "Wine was not found");
+  const wine = await getWineDetail(context.env, wineId);
+  if (wine === null) throw new HttpError(404, "wine_not_found", "Wine was not found");
   return jsonWithEtag(context.req.raw, wine, `wine-detail:${JSON.stringify(wine)}`);
 });
 
@@ -140,8 +145,8 @@ app.get("/api/v1/monopolies/:monopolyId/inventory", async (context) => {
 
 app.get("/api/v1/monopolies/:monopolyId", async (context) => {
   const monopolyId = parseEntityId(context.req.param("monopolyId"));
-  const monopoly = (await getMonopolyCatalog(context.env)).find(({ id }) => id === monopolyId);
-  if (monopoly === undefined) {
+  const monopoly = await getMonopolyDetail(context.env, monopolyId);
+  if (monopoly === null) {
     throw new HttpError(404, "monopoly_not_found", "Monopoly was not found");
   }
   return jsonWithEtag(context.req.raw, monopoly, `monopoly-detail:${JSON.stringify(monopoly)}`);

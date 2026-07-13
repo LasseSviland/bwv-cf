@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorState, LoadingState } from "../components/AsyncState";
+import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { InventoryMatrix, type InventoryRow } from "../components/InventoryMatrix";
 import { PageHeader } from "../components/PageHeader";
 import { PeriodPicker } from "../components/PeriodPicker";
@@ -21,6 +22,7 @@ import { Label } from "../components/ui/label";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import type { AppShellOutletContext } from "../layout/AppShell";
+import { classifyWineForStore, storeAssortmentLabel } from "../utils/assortment";
 import { wasSoldOutAtSomePoint } from "../utils/dates";
 
 export const WineDetailPage = () => {
@@ -35,18 +37,19 @@ export const WineDetailPage = () => {
   );
 
   const rows = useMemo<InventoryRow[]>(() => {
-    if (!request.data) return [];
+    const data = request.data;
+    if (!data) return [];
     const query = filter.trim().toLocaleLowerCase();
-    return request.data.monopolies
+    return data.monopolies
+      .map((entry) => ({
+        ...entry,
+        assortment: classifyWineForStore(data.wine, entry.monopoly),
+      }))
       .filter(
-        ({ inventory }) =>
+        ({ inventory, assortment }) =>
           !soldOutOnly ||
-          wasSoldOutAtSomePoint(
-            inventory,
-            request.data!.period.from,
-            request.data!.period.to,
-            request.data!,
-          ),
+          (assortment.status === "required" &&
+            wasSoldOutAtSomePoint(inventory, data.period.from, data.period.to, data)),
       )
       .filter(({ monopoly }) =>
         query
@@ -56,9 +59,12 @@ export const WineDetailPage = () => {
           : true,
       )
       .sort((left, right) => left.monopoly.name.localeCompare(right.monopoly.name, "nb"))
-      .map(({ monopoly, inventory }) => ({
+      .map(({ monopoly, inventory, assortment }) => ({
         id: String(monopoly.id),
         label: monopoly.name,
+        secondary: storeAssortmentLabel(monopoly),
+        assortmentStatus: assortment.status,
+        assortmentNote: assortment.explanation,
         inventory,
         href: `/monopolies/${monopoly.id}?from=${period.from}&to=${period.to}`,
       }));
@@ -103,11 +109,18 @@ export const WineDetailPage = () => {
     <div className="flex w-full min-w-0 flex-col gap-6">
       <PageHeader title={wine.name} />
 
+      <EntityMoreInfo kind="wine" entityId={String(wine.id)} label={wine.name} />
+
       <PeriodPicker
         period={period}
         onChange={setPeriod}
         availableMonths={status?.availableMonths}
       />
+
+      {request.loading ? <LoadingState label="Loading wine availability…" /> : null}
+      {!request.loading && request.error ? (
+        <ErrorState error={request.error} onRetry={request.reload} />
+      ) : null}
 
       <div className="space-y-3">
         <Input
@@ -124,7 +137,7 @@ export const WineDetailPage = () => {
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
             />
-            Sold out at some point
+            Sold out in required assortment
           </Label>
           <span>{rows.length} stores shown</span>
         </div>
@@ -135,11 +148,19 @@ export const WineDetailPage = () => {
         from={request.data.period.from}
         to={request.data.period.to}
         entityLabel="Monopoly"
-        emptyTitle={filter ? "No matching stores" : "No stores carried this wine"}
+        emptyTitle={
+          filter
+            ? "No matching stores"
+            : soldOutOnly
+              ? "No required stores were sold out"
+              : "No stores carried this wine"
+        }
         emptyDescription={
           filter
             ? "Clear the store filter or try a different name."
-            : "Choose another period to look for earlier or later availability."
+            : soldOutOnly
+              ? "This wine stayed in stock wherever it was part of the fixed assortment."
+              : "Choose another period to look for earlier or later availability."
         }
         freshness={freshness}
       />

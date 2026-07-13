@@ -48,7 +48,14 @@ export function searchWineCatalog(
     query.length === 0
       ? catalog
       : catalog.filter((wine) =>
-          [wine.name, wine.productNumber, wine.country ?? "", wine.wineCategory ?? ""]
+          [
+            wine.name,
+            wine.productNumber,
+            wine.country ?? "",
+            wine.wineCategory ?? "",
+            wine.assortment ?? "",
+            ...(wine.assortmentGrades ?? []),
+          ]
             .map(normalized)
             .some((value) => value.includes(query)),
         );
@@ -82,6 +89,8 @@ export function searchMonopolyCatalog(
             monopoly.postalCode ?? "",
             monopoly.city ?? "",
             monopoly.monopolyCategory ?? "",
+            monopoly.monopolyProfile ?? "",
+            monopoly.storeAssortment ?? "",
           ]
             .map(normalized)
             .some((value) => value.includes(query)),

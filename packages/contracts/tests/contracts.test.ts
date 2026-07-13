@@ -8,6 +8,7 @@ import {
   DailyInventorySchema,
   DateStringSchema,
   FreshnessSchema,
+  MonopolyDetailSchema,
   MonopolyCatalogResponseSchema,
   MonopolyInventoryResponseSchema,
   MonopolySummarySchema,
@@ -17,14 +18,17 @@ import {
   SyncQueueMessageSchema,
   UtcDateTimeSchema,
   WineCatalogResponseSchema,
+  WineDetailSchema,
   WineInventoryResponseSchema,
   WineSummarySchema,
   type AdminAcceptedResponse,
   type CatalogResponse,
   type MonopolyInventoryResponse,
+  type MonopolyDetail,
   type StatusResponse,
   type SyncQueueMessage,
   type WineInventoryResponse,
+  type WineDetail,
   type WineSummary,
 } from "../src/index.js";
 
@@ -34,6 +38,8 @@ const wine = {
   name: "Fjordglimt Riesling",
   country: "Tyskland",
   wineCategory: "6",
+  assortment: "Basisutvalget",
+  assortmentGrades: ["SB6L", "SB6R"],
 };
 
 const monopoly = {
@@ -43,6 +49,8 @@ const monopoly = {
   postalCode: "0250",
   city: "Oslo",
   monopolyCategory: "5",
+  monopolyProfile: "Rødt og Mørkt",
+  storeAssortment: "5R",
 };
 
 const freshness = {
@@ -107,6 +115,7 @@ describe("entity and inventory schemas", () => {
       name: string;
     }>();
     expectTypeOf<WineSummary["wineCategory"]>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<WineSummary["assortmentGrades"]>().toEqualTypeOf<string[] | undefined>();
   });
 
   it("rejects invalid identifiers, blank fields, and extra fields while accepting source nulls", () => {
@@ -114,6 +123,7 @@ describe("entity and inventory schemas", () => {
     expect(WineSummarySchema.safeParse({ ...wine, name: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, country: null }).success).toBe(true);
     expect(WineSummarySchema.safeParse({ ...wine, wineCategory: " " }).success).toBe(false);
+    expect(WineSummarySchema.safeParse({ ...wine, assortmentGrades: [" "] }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, secret: "no" }).success).toBe(false);
     expect(MonopolySummarySchema.safeParse({ ...monopoly, postalCode: "" }).success).toBe(false);
     expect(
@@ -122,6 +132,35 @@ describe("entity and inventory schemas", () => {
     expect(MonopolySummarySchema.safeParse({ ...monopoly, monopolyCategory: null }).success).toBe(
       true,
     );
+  });
+
+  it("exposes complete JSON source data through strict entity detail contracts", () => {
+    const wineDetail = WineDetailSchema.parse({
+      ...wine,
+      sourceData: {
+        basic: { productId: "001234", volume: 0.75, vintage: 2022 },
+        properties: { organic: true },
+        grapes: [{ name: "Riesling", percentage: 100 }],
+        legacyDatabase: { method: null },
+      },
+    });
+    const monopolyDetail = MonopolyDetailSchema.parse({
+      ...monopoly,
+      sourceData: {
+        address: { street: "Bryggegata 9", postalCode: "0250" },
+        openingHours: [{ day: "Monday", opens: "10:00", closes: "18:00" }],
+      },
+    });
+
+    expect(wineDetail.sourceData.properties).toEqual({ organic: true });
+    expect(monopolyDetail.sourceData.address).toEqual({
+      street: "Bryggegata 9",
+      postalCode: "0250",
+    });
+    expectTypeOf(wineDetail).toMatchTypeOf<WineDetail>();
+    expectTypeOf(monopolyDetail).toMatchTypeOf<MonopolyDetail>();
+    expect(WineDetailSchema.safeParse({ ...wine, sourceData: null }).success).toBe(false);
+    expect(MonopolyDetailSchema.safeParse({ ...monopoly, sourceData: [] }).success).toBe(false);
   });
 
   it("validates non-negative integer daily inventory", () => {

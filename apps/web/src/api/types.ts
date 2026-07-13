@@ -9,6 +9,9 @@ export type {
   DailyInventory,
   Freshness,
   ISODate,
+  JsonObject,
+  JsonValue,
+  MonopolyDetail,
   MonopolyInventoryEntry,
   MonopolyInventoryResponse,
   MonopolySummary,
@@ -18,6 +21,7 @@ export type {
   StatusResponse,
   WineInventoryEntry,
   WineInventoryResponse,
+  WineDetail,
   WineSummary,
   WineCatalogItem,
 } from "@bwv/contracts";

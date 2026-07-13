@@ -1,9 +1,9 @@
-import { KeyRound, LoaderCircle, Wine } from "lucide-react";
-import { useState, type FormEvent, type PropsWithChildren } from "react";
+import { KeyRound, LoaderCircle } from "lucide-react";
+import { useEffect, useState, type FormEvent, type PropsWithChildren } from "react";
 import { ApiError } from "../api/client";
 import { Alert, AlertDescription } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuth } from "./AuthProvider";
@@ -12,6 +12,10 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
   const { state, unlock } = useAuth();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = state === "unlocked" ? "Better Wines" : "Private access";
+  }, [state]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,10 +39,9 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
     return (
       <main className="grid min-h-screen place-items-center bg-primary p-6" aria-busy="true">
         <Card className="w-full max-w-md py-12 text-center shadow-2xl">
-          <BrandMark />
           <CardContent className="flex flex-col items-center gap-4 text-muted-foreground">
             <LoaderCircle className="size-7 animate-spin text-primary" aria-hidden="true" />
-            <p>Opening your inventory workspace…</p>
+            <p>Checking access…</p>
           </CardContent>
         </Card>
       </main>
@@ -49,25 +52,15 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-primary p-4 sm:p-8">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.12),transparent_38%),radial-gradient(circle_at_15%_90%,rgba(255,255,255,0.07),transparent_30%)]" />
       <Card
-        className="relative w-full max-w-xl border-white/15 bg-card py-8 shadow-2xl sm:py-12"
+        className="relative w-full max-w-md border-white/15 bg-card py-8 shadow-2xl sm:py-10"
         aria-labelledby="gate-title"
       >
-        <CardHeader className="gap-5 px-6 sm:px-12">
-          <BrandMark />
-          <div>
-            <p className="mb-3 text-xs font-semibold tracking-[0.16em] text-primary uppercase">
-              Private inventory history
-            </p>
-            <CardTitle className="max-w-sm font-serif text-4xl leading-none font-normal tracking-tight sm:text-6xl">
-              <h1 id="gate-title">Welcome to Better Wines</h1>
-            </CardTitle>
-            <CardDescription className="mt-5 max-w-lg text-base leading-7">
-              Enter the API access password to explore daily availability across Vinmonopolet
-              stores.
-            </CardDescription>
-          </div>
+        <CardHeader className="px-6 sm:px-10">
+          <CardTitle className="font-serif text-3xl leading-tight font-normal tracking-tight sm:text-4xl">
+            <h1 id="gate-title">Enter password to access</h1>
+          </CardTitle>
         </CardHeader>
-        <CardContent className="px-6 sm:px-12">
+        <CardContent className="px-6 sm:px-10">
           <form
             className="space-y-3"
             onSubmit={(event) => {
@@ -84,7 +77,7 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
                 autoFocus
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                aria-describedby={error ? "password-error" : "password-help"}
+                aria-describedby={error ? "password-error" : undefined}
               />
               <Button className="h-10 px-5" type="submit" disabled={state === "unlocking"}>
                 {state === "unlocking" ? <LoaderCircle className="animate-spin" /> : <KeyRound />}
@@ -95,26 +88,10 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
               <Alert variant="destructive" id="password-error">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
-            ) : (
-              <p className="text-sm text-muted-foreground" id="password-help">
-                Saved in this browser for future visits.
-              </p>
-            )}
+            ) : null}
           </form>
         </CardContent>
       </Card>
     </main>
   );
 };
-
-const BrandMark = () => (
-  <div className="flex items-center gap-3 px-4 text-primary" aria-label="Better Wines">
-    <span
-      className="grid size-11 place-items-center rounded-full bg-primary text-primary-foreground"
-      aria-hidden="true"
-    >
-      <Wine className="size-5" />
-    </span>
-    <span className="font-semibold">Better Wines</span>
-  </div>
-);

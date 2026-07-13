@@ -9,6 +9,8 @@ import {
   searchMonopolyCatalog,
   searchWineCatalog,
 } from "../src/api/catalog";
+import { monopolyDetailFromSource, wineDetailFromSource } from "../src/ingestion/catalogs";
+import type { JsonObject } from "../src/types";
 
 const wines: WineSummary[] = [
   {
@@ -89,5 +91,82 @@ describe("catalog query helpers", () => {
     expect(parseCatalogLimit("100")).toBe(100);
     expect(parseCatalogLimit("1000")).toBe(1000);
     expect(() => parseCatalogLimit("1001")).toThrow("between 1 and 1000");
+  });
+});
+
+describe("entity details", () => {
+  it("preserves the complete wine source record in the API detail shape", () => {
+    const source: JsonObject = {
+      basic: {
+        productId: "20491401",
+        productLongName: "Pora Riserva",
+        volume: 0.75,
+        alcoholContent: 14.5,
+      },
+      logistics: { wholesalerName: "Better Wines AS", manufacturerName: "Produttori" },
+      origins: { origin: { country: "Italia", region: "Piemonte" } },
+      classification: { productTypeName: "Rødvin" },
+      assortment: {
+        assortment: "Basisutvalget",
+        assortmentGrades: [{ assortmentGrade: "SB4L" }, { assortmentGrade: "SB5R" }],
+      },
+      ingredients: { grapes: [{ grapeDesc: "Nebbiolo", grapePct: 100 }] },
+      properties: { organic: false },
+      legacyDatabase: { pris: "759.90", metode: "Tradisjonell vinifikasjon" },
+    };
+
+    const detail = wineDetailFromSource(source);
+
+    expect(detail).toMatchObject({
+      id: 20_491_401,
+      productNumber: "20491401",
+      name: "Pora Riserva",
+      country: "Italia",
+      wineCategory: "SB4L, SB5R",
+      assortment: "Basisutvalget",
+      assortmentGrades: ["SB4L", "SB5R"],
+    });
+    expect(detail.sourceData).toEqual(source);
+  });
+
+  it("preserves the complete monopoly source record in the API detail shape", () => {
+    const source: JsonObject = {
+      storeId: "114",
+      storeName: "Oslo, Aker Brygge",
+      category: "6",
+      profile: "Rødt og Mørkt",
+      storeAssortment: "6R",
+      address: { street: "Bryggegata 9", postalCode: "0250", city: "Oslo" },
+      telephone: "22 01 50 00",
+      openingHours: [{ dayOfTheWeek: "Monday", openingTime: "10:00" }],
+      legacyDatabase: { total_vin_num: 17 },
+    };
+
+    const detail = monopolyDetailFromSource(source);
+
+    expect(detail).toMatchObject({
+      id: 114,
+      storeNumber: "114",
+      name: "Oslo, Aker Brygge",
+      city: "Oslo",
+      monopolyCategory: "6",
+      monopolyProfile: "Rødt og Mørkt",
+      storeAssortment: "6R",
+    });
+    expect(detail.sourceData).toEqual(source);
+  });
+
+  it("reads a legacy assortment category while migrated catalogs are being refreshed", () => {
+    const detail = wineDetailFromSource({
+      basic: { productId: "1946001", productLongName: "Chablis Premier Cru" },
+      legacyDatabase: { produktutvalg: "Basisutvalget", butikkategori: "SB6L" },
+      classification: { productTypeName: "Rødvin" },
+    });
+
+    expect(detail).toMatchObject({
+      wineCategory: "SB6L",
+      assortment: "Basisutvalget",
+      assortmentGrades: ["SB6L"],
+    });
   });
 });

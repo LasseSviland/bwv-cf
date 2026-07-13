@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { MonopolyCatalogItem, Period } from "../api/types";
 import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
+import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
 
 const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; period: Period }) => {
@@ -26,6 +27,12 @@ const MonopolyRow = ({ monopoly, period }: { monopoly: MonopolyCatalogItem; peri
           <ArrowRight />
         </Link>
       </Button>
+      <EntityMoreInfo
+        className="md:col-span-3"
+        kind="monopoly"
+        entityId={String(monopoly.id)}
+        label={monopoly.name}
+      />
     </div>
   );
 };
@@ -46,6 +53,8 @@ export const MonopoliesPage = () => (
         monopoly.postalCode ?? "",
         monopoly.city ?? "",
         monopoly.monopolyCategory ?? "",
+        monopoly.monopolyProfile ?? "",
+        monopoly.storeAssortment ?? "",
       ].join(" ")
     }
     searchFields={(monopoly) => [
@@ -54,6 +63,8 @@ export const MonopoliesPage = () => (
       monopoly.postalCode ?? "",
       monopoly.city ?? "",
       monopoly.monopolyCategory ?? "",
+      monopoly.monopolyProfile ?? "",
+      monopoly.storeAssortment ?? "",
     ]}
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
     sortItems={(left, right) =>

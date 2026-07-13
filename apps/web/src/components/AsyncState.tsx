@@ -4,7 +4,7 @@ interface ErrorStateProps {
 }
 
 export const LoadingState = ({ label = "Loading inventory…" }: { label?: string }) => (
-  <Card aria-live="polite" aria-busy="true">
+  <Card role="status" aria-live="polite" aria-busy="true">
     <CardContent className="flex items-center gap-4 py-4">
       <LoaderCircle className="size-5 animate-spin text-primary" aria-hidden="true" />
       <div>

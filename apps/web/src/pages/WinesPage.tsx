@@ -1,9 +1,10 @@
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Period, WineCatalogItem } from "../api/types";
 import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
+import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
 
 const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) => {
@@ -15,29 +16,6 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
           <Link className="min-w-0 truncate" to={href} title={wine.name}>
             {wine.name}
           </Link>
-          <details className="relative shrink-0">
-            <summary
-              className="grid size-5 cursor-pointer list-none place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label={`More information about ${wine.name}`}
-            >
-              <Info className="size-3.5" />
-            </summary>
-            <div className="absolute left-0 top-7 z-10 w-56 rounded-lg border bg-card p-3 text-xs font-normal shadow-lg">
-              <p>
-                <strong>Product number:</strong> {wine.productNumber}
-              </p>
-              {wine.country ? (
-                <p className="mt-1">
-                  <strong>Country:</strong> {wine.country}
-                </p>
-              ) : null}
-              {wine.wineCategory ? (
-                <p className="mt-1">
-                  <strong>Wine category:</strong> {wine.wineCategory}
-                </p>
-              ) : null}
-            </div>
-          </details>
         </h2>
       </div>
       <BottleHistory inventory={wine.availability.bottlesByDate} label={wine.name} />
@@ -46,6 +24,12 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
           <ArrowRight />
         </Link>
       </Button>
+      <EntityMoreInfo
+        className="md:col-span-3"
+        kind="wine"
+        entityId={String(wine.id)}
+        label={wine.name}
+      />
     </div>
   );
 };
@@ -60,13 +44,22 @@ export const WinesPage = () => (
     emptyDescription="Try another wine name or product number."
     itemKey={(wine) => wine.id}
     searchText={(wine) =>
-      [wine.name, wine.productNumber, wine.country ?? "", wine.wineCategory ?? ""].join(" ")
+      [
+        wine.name,
+        wine.productNumber,
+        wine.country ?? "",
+        wine.wineCategory ?? "",
+        wine.assortment ?? "",
+        ...(wine.assortmentGrades ?? []),
+      ].join(" ")
     }
     searchFields={(wine) => [
       wine.name,
       wine.productNumber,
       wine.country ?? "",
       wine.wineCategory ?? "",
+      wine.assortment ?? "",
+      ...(wine.assortmentGrades ?? []),
     ]}
     pageSize={1_000}
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}

@@ -14,6 +14,45 @@ const mockFetch = (body: unknown, status = 200) => {
 };
 
 describe("API contract validation", () => {
+  it("loads complete wine details from the single-entity API", async () => {
+    const fetchMock = mockFetch({
+      id: 7,
+      productNumber: "123456",
+      name: "Langhe Nebbiolo",
+      country: "Italia",
+      wineCategory: "Rødvin",
+      sourceData: {
+        basic: { productId: "123456", volume: 0.75, vintage: 2021 },
+        description: { characteristics: { taste: "Fresh and balanced." } },
+      },
+    });
+
+    const result = await api.getWine("session-key", "7");
+
+    expect(result.sourceData.basic).toEqual({ productId: "123456", volume: 0.75, vintage: 2021 });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/wines/7");
+  });
+
+  it("loads complete monopoly details from the single-entity API", async () => {
+    const fetchMock = mockFetch({
+      id: 114,
+      storeNumber: "114",
+      name: "Oslo, Aker Brygge",
+      postalCode: "0250",
+      city: "Oslo",
+      monopolyCategory: "6",
+      sourceData: {
+        address: { street: "Bryggegata 9", postalCode: "0250", city: "Oslo" },
+        telephone: "22 01 50 00",
+      },
+    });
+
+    const result = await api.getMonopoly("session-key", "114");
+
+    expect(result.sourceData.telephone).toBe("22 01 50 00");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/monopolies/114");
+  });
+
   it("returns a catalog only after it passes the shared wine catalog schema", async () => {
     const fetchMock = mockFetch({
       items: [
