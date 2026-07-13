@@ -70,9 +70,39 @@ test("merges current API records over historic records and removes other wholesa
     ],
   };
   const merged = mergeWineCatalogs(historic, current, "2026-07-13T00:00:00.000Z");
+  assert.equal(merged.schemaVersion, 2);
+  assert.deepEqual(merged.outdatedProducts, {});
   assert.equal(merged.wines.length, 1);
   assert.equal(merged.wines[0].basic.productLongName, "Current name");
   assert.deepEqual(merged.wines[0].migration, historicWine.migration);
+});
+
+test("preserves remote outdated dates and does not reactivate migration-only wines", () => {
+  const historic = {
+    schemaVersion: 2,
+    syncedAt: "2026-01-01T00:00:00.000Z",
+    source: "vinmonopolet/my-products/v1/details-normal",
+    wholesaler: BETTER_WINES_WHOLESALER,
+    wines: [
+      wineFromLegacyRow(wineRow({ id: 1, varenummer: "100", varenavn: "Current wine" })),
+      wineFromLegacyRow(wineRow({ id: 2, varenummer: "200", varenavn: "Migration only" })),
+      wineFromLegacyRow(wineRow({ id: 3, varenummer: "300", varenavn: "Already outdated" })),
+    ],
+    outdatedProducts: { 300: "2026-06-01" },
+  };
+  const current = {
+    ...historic,
+    syncedAt: "2026-07-12T08:00:00.000Z",
+    wines: [historic.wines[0], historic.wines[2]],
+    outdatedProducts: { 300: "2026-06-01" },
+  };
+
+  const merged = mergeWineCatalogs(historic, current, "2026-07-13T22:30:00.000Z");
+
+  assert.deepEqual(merged.outdatedProducts, {
+    200: "2026-07-14",
+    300: "2026-06-01",
+  });
 });
 
 test("prepares one compatible inventory file per date and keeps the latest observation", async () => {
@@ -116,6 +146,11 @@ test("prepares one compatible inventory file per date and keeps the latest obser
     const second = JSON.parse(
       await readFile(join(root, "cloudflare", "inventory", "2026-01-02.json"), "utf8"),
     );
+    const wines = JSON.parse(
+      await readFile(join(root, "cloudflare", "catalogs", "wines.json"), "utf8"),
+    );
+    assert.equal(wines.schemaVersion, 2);
+    assert.deepEqual(wines.outdatedProducts, {});
     assert.deepEqual(first.products, []);
     assert.deepEqual(second.products, [
       { productId: "100", stock: [{ storeId: "10", storeStock: 4 }] },

@@ -6,14 +6,21 @@ import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
+import { formatDate } from "../utils/dates";
 
 const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) => {
   const href = `/wines/${wine.id}?from=${period.from}&to=${period.to}`;
   return (
     <div className="grid gap-5 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:py-7">
       <div className="min-w-0">
-        <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.14em] text-primary/65 uppercase">
-          {wine.wineCategory || "Wine"}
+        <p
+          className={`mb-2 text-[0.62rem] font-semibold tracking-[0.14em] uppercase ${
+            wine.outdatedAt ? "text-amber-700" : "text-primary/65"
+          }`}
+        >
+          {wine.outdatedAt
+            ? `Outdated since ${formatDate(wine.outdatedAt)}`
+            : wine.wineCategory || "Wine"}
         </p>
         <h2 className="font-serif text-2xl leading-tight font-normal tracking-[-0.025em]">
           <Link className="transition-colors hover:text-primary/70" to={href} title={wine.name}>
@@ -61,7 +68,7 @@ export const WinesPage = () => (
   <CatalogBrowser<WineCatalogItem>
     kind="wines"
     title="Wines"
-    description="Explore every bottle in the Better Wines portfolio, with current stock and recent movement across Norway."
+    description="Explore the current Better Wines portfolio. Search also finds retained historical products that have left the Vinmonopolet catalogue."
     searchLabel="Search wines"
     searchPlaceholder="Search by wine name, product number or category"
     emptyTitle="No wines found"
@@ -84,7 +91,9 @@ export const WinesPage = () => (
       wine.wineCategory ?? "",
       wine.assortment ?? "",
       ...(wine.assortmentGrades ?? []),
+      wine.outdatedAt ? "outdated" : "",
     ]}
+    searchOnServer
     pageSize={1_000}
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
     sortItems={(left, right) =>

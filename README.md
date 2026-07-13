@@ -4,12 +4,12 @@ Password-protected inventory history for Norwegian Vinmonopolet stores, deployed
 
 The Worker serves the React SPA, the `/api/v1` API, a daily Cron producer, and a single-concurrency Queue consumer. Vinmonopolet is the source of truth. Every sync fetches the complete Better Wines catalog and store catalog, merges both with the prior R2 copies, and fetches the complete stock response when that day's inventory file does not already exist.
 
-All source records are retained as raw JSON so newly added API fields are not discarded. Current records replace changed values while the deep merge preserves fields omitted by a later response. Records removed from the API remain in the catalogs.
+All source records are retained as raw JSON so newly added API fields are not discarded. Current records replace changed values while the deep merge preserves fields omitted by a later response. Wine records removed from My Products remain available for search and historical product pages, but the catalog records their first unavailable date and excludes them from the active portfolio, store pages, and statistics.
 
 ## R2 layout
 
 ```text
-catalogs/wines.json          Complete merged Better Wines catalog
+catalogs/wines.json          Merged catalog plus outdatedProducts detection dates
 catalogs/monopolies.json     Complete merged Vinmonopolet store catalog
 inventory/YYYY-MM-DD.json    One complete stock-per-store response per Oslo day
 ```

@@ -24,7 +24,7 @@ The consumer performs these steps sequentially:
 2. Fetch and merge the complete Vinmonopolet store catalog.
 3. If today's daily inventory object is absent, fetch all stock and write one object for the entire response.
 
-Catalog records are keyed by product or store ID. New data wins, nested fields omitted by the new response are retained, and source records that disappear remain in the catalog. The inventory object uses a conditional create, so duplicate Queue delivery cannot overwrite an already captured day.
+Catalog records are keyed by product or store ID. New data wins and nested fields omitted by the new response are retained. A wine missing from the current My Products response remains in the file with its first detection date under `outdatedProducts`, but immediately leaves all active portfolio, store, and statistics views. If it reappears, the marker is removed. The inventory object uses a conditional create, so duplicate Queue delivery cannot overwrite an already captured day.
 
 ## Manual regeneration
 
@@ -38,7 +38,7 @@ curl --fail --request POST \
 
 To regenerate a day's inventory, delete only `inventory/YYYY-MM-DD.json`, then trigger the sync. Wines and stores are fetched and merged on every invocation regardless of whether the daily inventory object exists.
 
-Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and triggering a sync reconstructs that catalog from the current API response. Because deleted source records can only be retained by merging with the prior file, deleting a catalog intentionally discards that retained history.
+Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and triggering a sync reconstructs that catalog from the current API response. Because removed source records and their first unavailable dates can only be retained by merging with the prior file, deleting a catalog intentionally discards that retained history.
 
 ## Failures and recovery
 

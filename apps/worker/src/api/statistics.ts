@@ -79,6 +79,7 @@ function storeProfile(monopoly: MonopolySummary): "L" | "R" | null {
 }
 
 export function isWineRequiredAtStore(wine: WineSummary, monopoly: MonopolySummary): boolean {
+  if (wine.outdatedAt !== undefined && wine.outdatedAt !== null) return false;
   const category = storeCategory(monopoly);
   const grades = parsedGrades(wine);
   if (category === null || grades.length === 0) return false;
@@ -121,10 +122,13 @@ class StockoutStatisticsAccumulator {
     wines: readonly WineSummary[],
     monopolies: readonly MonopolySummary[],
   ) {
-    this.wineByProductNumber = new Map(wines.map((wine) => [wine.productNumber, wine]));
+    const currentWines = wines.filter(
+      (wine) => wine.outdatedAt === undefined || wine.outdatedAt === null,
+    );
+    this.wineByProductNumber = new Map(currentWines.map((wine) => [wine.productNumber, wine]));
     this.storeByNumber = new Map(monopolies.map((monopoly) => [monopoly.storeNumber, monopoly]));
     this.knownDateSet = new Set(knownDates);
-    for (const wine of wines) {
+    for (const wine of currentWines) {
       for (const monopoly of monopolies) {
         if (!isWineRequiredAtStore(wine, monopoly)) continue;
         this.trackedPairs.set(pairKey(wine.id, monopoly.id), {

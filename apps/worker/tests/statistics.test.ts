@@ -54,13 +54,26 @@ describe("portfolio stockout statistics", () => {
     expect(isWineRequiredAtStore(wines[1]!, monopolies[0]!)).toBe(false);
     expect(isWineRequiredAtStore(wines[1]!, monopolies[1]!)).toBe(true);
     expect(isWineRequiredAtStore(wines[2]!, monopolies[1]!)).toBe(false);
+    expect(isWineRequiredAtStore({ ...wines[0]!, outdatedAt: "2026-07-13" }, monopolies[1]!)).toBe(
+      false,
+    );
   });
 
   it("counts daily pair stockouts, distinct wines and stores, transitions, and depleted bottles", () => {
     const result = calculateStockoutStatistics({
       knownDates: ["2026-07-10", "2026-07-11", "2026-07-12"],
       comparisonDate: "2026-07-09",
-      wines,
+      wines: [
+        ...wines,
+        {
+          id: 400,
+          productNumber: "400",
+          name: "Outdated Red",
+          assortment: "Basisutvalget",
+          assortmentGrades: ["SB1R"],
+          outdatedAt: "2026-07-13",
+        },
+      ],
       monopolies,
       observations: [
         { date: "2026-07-09", productId: "100", storeId: "10", count: 2 },
@@ -70,6 +83,7 @@ describe("portfolio stockout statistics", () => {
         { date: "2026-07-10", productId: "100", storeId: "20", count: 5 },
         { date: "2026-07-10", productId: "200", storeId: "20", count: 4 },
         { date: "2026-07-10", productId: "300", storeId: "10", count: 7 },
+        { date: "2026-07-10", productId: "400", storeId: "10", count: 100 },
         { date: "2026-07-11", productId: "100", storeId: "20", count: 3 },
         { date: "2026-07-11", productId: "200", storeId: "20", count: 4 },
         { date: "2026-07-11", productId: "300", storeId: "10", count: 6 },

@@ -55,6 +55,7 @@ export function searchWineCatalog(
             wine.wineCategory ?? "",
             wine.assortment ?? "",
             ...(wine.assortmentGrades ?? []),
+            wine.outdatedAt === undefined || wine.outdatedAt === null ? "" : "outdated",
           ]
             .map(normalized)
             .some((value) => value.includes(query)),

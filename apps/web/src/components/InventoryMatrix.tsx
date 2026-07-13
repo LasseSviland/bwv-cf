@@ -63,6 +63,8 @@ const inventoryDescription = (
   if (!available) return `${formatDate(date)}: data unavailable`;
   const bottles = `${count} bottle${count === 1 ? "" : "s"} in stock`;
   switch (rowStatus(row)) {
+    case "historical":
+      return `${formatDate(date)}: ${count > 0 ? bottles : "no recorded stock"}; historical record`;
     case "additional":
       return `${formatDate(date)}: ${count > 0 ? bottles : "not currently stocked"}; additional product`;
     case "unknown":
@@ -79,12 +81,18 @@ const assortmentBadge = (row: InventoryRow) => {
     <div className="mt-2 space-y-1.5">
       <Badge
         className={
-          status === "additional"
-            ? "bg-sky-100 text-sky-900 hover:bg-sky-100"
-            : "bg-amber-100 text-amber-900 hover:bg-amber-100"
+          status === "historical"
+            ? "bg-stone-100 text-stone-700 hover:bg-stone-100"
+            : status === "additional"
+              ? "bg-sky-100 text-sky-900 hover:bg-sky-100"
+              : "bg-amber-100 text-amber-900 hover:bg-amber-100"
         }
       >
-        {status === "additional" ? "Additional product" : "Assortment unknown"}
+        {status === "historical"
+          ? "Historical record"
+          : status === "additional"
+            ? "Additional product"
+            : "Assortment unknown"}
       </Badge>
       {row.assortmentNote ? (
         <span className="block max-w-64 text-xs font-normal text-muted-foreground">
@@ -111,6 +119,7 @@ export const InventoryMatrix = ({
   const monthGroups = groupDatesByMonth(dates);
   const showAdditional = rows.some((row) => rowStatus(row) === "additional");
   const showUnknown = rows.some((row) => rowStatus(row) === "unknown");
+  const showHistorical = rows.some((row) => rowStatus(row) === "historical");
   const showUnavailable = dates.some((date) => !isInventoryDateAvailable(date, freshness));
   const requiredCounts = rows
     .filter((row) => rowStatus(row) === "required")
@@ -140,6 +149,7 @@ export const InventoryMatrix = ({
             showSoldOut={showSoldOut}
             showAdditional={showAdditional}
             showUnknown={showUnknown}
+            showHistorical={showHistorical}
             showUnavailable={showUnavailable}
           />
         </div>
@@ -295,17 +305,19 @@ export const InventoryMatrix = ({
                         className={
                           !available
                             ? `h-16 min-w-11 border-r border-border/60 bg-muted/30 p-1 text-center text-muted-foreground${separatorClass}`
-                            : status === "additional"
-                              ? `h-16 min-w-11 border-r border-sky-200/70 bg-sky-50 p-1 text-center font-semibold text-sky-900${separatorClass}`
-                              : status === "unknown"
-                                ? `h-16 min-w-11 border-r border-amber-200/70 bg-amber-50 p-1 text-center text-amber-900${separatorClass}`
-                                : inStock
-                                  ? `h-16 min-w-11 border-r border-emerald-200/70 p-1 text-center font-semibold text-emerald-900 ${
-                                      dateIndex === 0 ? "bg-emerald-200/75" : "bg-emerald-50"
-                                    }${separatorClass}`
-                                  : `h-16 min-w-11 border-r border-rose-200/70 p-1 text-center text-rose-900 ${
-                                      dateIndex === 0 ? "bg-rose-200/75" : "bg-rose-50"
-                                    }${separatorClass}`
+                            : status === "historical"
+                              ? `h-16 min-w-11 border-r border-stone-200 bg-stone-50 p-1 text-center font-semibold text-stone-700${separatorClass}`
+                              : status === "additional"
+                                ? `h-16 min-w-11 border-r border-sky-200/70 bg-sky-50 p-1 text-center font-semibold text-sky-900${separatorClass}`
+                                : status === "unknown"
+                                  ? `h-16 min-w-11 border-r border-amber-200/70 bg-amber-50 p-1 text-center text-amber-900${separatorClass}`
+                                  : inStock
+                                    ? `h-16 min-w-11 border-r border-emerald-200/70 p-1 text-center font-semibold text-emerald-900 ${
+                                        dateIndex === 0 ? "bg-emerald-200/75" : "bg-emerald-50"
+                                      }${separatorClass}`
+                                    : `h-16 min-w-11 border-r border-rose-200/70 p-1 text-center text-rose-900 ${
+                                        dateIndex === 0 ? "bg-rose-200/75" : "bg-rose-50"
+                                      }${separatorClass}`
                         }
                         title={description}
                         aria-label={description}
@@ -315,11 +327,13 @@ export const InventoryMatrix = ({
                             ? "?"
                             : inStock
                               ? count
-                              : status === "additional"
-                                ? "A"
-                                : status === "unknown"
-                                  ? "i"
-                                  : "—"}
+                              : status === "historical"
+                                ? "·"
+                                : status === "additional"
+                                  ? "A"
+                                  : status === "unknown"
+                                    ? "i"
+                                    : "—"}
                         </span>
                       </TableCell>
                     );
@@ -358,28 +372,34 @@ export const InventoryMatrix = ({
                   className={
                     !latestAvailable
                       ? "shrink-0"
-                      : status === "additional"
-                        ? "shrink-0 bg-sky-100 text-sky-900 hover:bg-sky-100"
-                        : status === "unknown"
-                          ? "shrink-0 bg-amber-100 text-amber-900 hover:bg-amber-100"
-                          : count > 0
-                            ? "shrink-0 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
-                            : "shrink-0 bg-rose-100 text-rose-900 hover:bg-rose-100"
+                      : status === "historical"
+                        ? "shrink-0 bg-stone-100 text-stone-700 hover:bg-stone-100"
+                        : status === "additional"
+                          ? "shrink-0 bg-sky-100 text-sky-900 hover:bg-sky-100"
+                          : status === "unknown"
+                            ? "shrink-0 bg-amber-100 text-amber-900 hover:bg-amber-100"
+                            : count > 0
+                              ? "shrink-0 bg-emerald-100 text-emerald-900 hover:bg-emerald-100"
+                              : "shrink-0 bg-rose-100 text-rose-900 hover:bg-rose-100"
                   }
                 >
                   {!latestAvailable
                     ? "Data unavailable"
-                    : status === "additional"
+                    : status === "historical"
                       ? count > 0
-                        ? `Additional · ${count} in stock`
-                        : "Additional product"
-                      : status === "unknown"
+                        ? `Historical · ${count} recorded`
+                        : "Historical record"
+                      : status === "additional"
                         ? count > 0
-                          ? `Unclassified · ${count} in stock`
-                          : "Assortment unknown"
-                        : count > 0
-                          ? `${count} in stock`
-                          : "Sold out"}
+                          ? `Additional · ${count} in stock`
+                          : "Additional product"
+                        : status === "unknown"
+                          ? count > 0
+                            ? `Unclassified · ${count} in stock`
+                            : "Assortment unknown"
+                          : count > 0
+                            ? `${count} in stock`
+                            : "Sold out"}
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-1">
@@ -412,13 +432,17 @@ export const InventoryMatrix = ({
                         className={
                           !available
                             ? "h-5 min-w-2 flex-1 rounded-sm border border-dashed bg-muted"
-                            : status === "additional"
-                              ? "h-5 min-w-2 flex-1 rounded-sm bg-sky-300"
-                              : status === "unknown"
-                                ? "h-5 min-w-2 flex-1 rounded-sm bg-amber-300"
-                                : dailyCount > 0
-                                  ? "h-5 min-w-2 flex-1 rounded-sm bg-emerald-400"
-                                  : "h-5 min-w-2 flex-1 rounded-sm bg-rose-300"
+                            : status === "historical"
+                              ? dailyCount > 0
+                                ? "h-5 min-w-2 flex-1 rounded-sm bg-stone-500"
+                                : "h-5 min-w-2 flex-1 rounded-sm bg-stone-200"
+                              : status === "additional"
+                                ? "h-5 min-w-2 flex-1 rounded-sm bg-sky-300"
+                                : status === "unknown"
+                                  ? "h-5 min-w-2 flex-1 rounded-sm bg-amber-300"
+                                  : dailyCount > 0
+                                    ? "h-5 min-w-2 flex-1 rounded-sm bg-emerald-400"
+                                    : "h-5 min-w-2 flex-1 rounded-sm bg-rose-300"
                         }
                         title={description}
                         aria-label={description}

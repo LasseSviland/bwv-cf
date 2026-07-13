@@ -1,3 +1,5 @@
+import { DateStringSchema } from "@bwv/contracts";
+
 import { HttpError, PermanentQueueError } from "../errors";
 import type {
   CompletedInventoryDate,
@@ -45,18 +47,34 @@ export function parseMonopolyCatalogFile(value: unknown): MonopolyCatalogFile {
 export function parseWineCatalogFile(value: unknown): WineCatalogFile {
   const file = parseJsonObject(value, "Wine catalog");
   if (
-    file.schemaVersion !== 1 ||
+    (file.schemaVersion !== 1 && file.schemaVersion !== 2) ||
     file.source !== "vinmonopolet/my-products/v1/details-normal" ||
     file.wholesaler !== "Better Wines AS"
   ) {
     throw new PermanentQueueError("Wine catalog schema is not supported");
   }
+  const outdatedProducts: Record<string, string> = {};
+  if (file.schemaVersion === 2) {
+    if (!isObject(file.outdatedProducts)) {
+      throw new PermanentQueueError("Wine catalog outdatedProducts must be a JSON object");
+    }
+    for (const [productId, value] of Object.entries(file.outdatedProducts)) {
+      const parsed = DateStringSchema.safeParse(value);
+      if (!parsed.success) {
+        throw new PermanentQueueError(
+          `Wine catalog outdatedProducts.${productId} must be a valid date`,
+        );
+      }
+      outdatedProducts[productId] = parsed.data;
+    }
+  }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     syncedAt: requiredString(file.syncedAt, "Wine catalog syncedAt"),
     source: "vinmonopolet/my-products/v1/details-normal",
     wholesaler: "Better Wines AS",
     wines: parseJsonObjectArray(file.wines, "Wine catalog wines"),
+    outdatedProducts,
   };
 }
 

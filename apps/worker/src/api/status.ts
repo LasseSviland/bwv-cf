@@ -1,6 +1,7 @@
 import type { Freshness, StatusResponse } from "@bwv/contracts";
 import { currentMonthInOslo, enumerateMonths } from "@bwv/data-format";
 
+import { activeWineSources } from "../ingestion/catalogs";
 import { MONOPOLIES_KEY, WINES_KEY } from "../storage/keys";
 import {
   getOptionalJson,
@@ -16,7 +17,7 @@ export async function getStatus(env: Env): Promise<StatusResponse> {
     getOptionalJson(env.DATA_BUCKET, MONOPOLIES_KEY, parseMonopolyCatalogFile),
   ]);
   const catalog = {
-    wines: wines?.wines.length ?? 0,
+    wines: wines === null ? 0 : activeWineSources(wines).length,
     monopolies: monopolies?.monopolies.length ?? 0,
   };
   if (completed.length === 0) return { freshness: null, availableMonths: [], catalog };

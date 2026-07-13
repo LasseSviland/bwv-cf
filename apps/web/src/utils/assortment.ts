@@ -1,6 +1,6 @@
 import type { MonopolySummary, WineSummary } from "../api/types";
 
-export type AssortmentStatus = "required" | "additional" | "unknown";
+export type AssortmentStatus = "required" | "additional" | "unknown" | "historical";
 
 export interface AssortmentClassification {
   status: AssortmentStatus;

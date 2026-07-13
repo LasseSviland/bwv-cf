@@ -163,10 +163,17 @@ export async function summarizeWines(
     wines.map(({ productNumber }) => productNumber),
   );
   const index = indexObservations(observations, "wine");
-  return wines.map((wine) => ({
-    ...wine,
-    availability: summarizeAvailability(entriesFor(index, wine.id), knownDates),
-  }));
+  return wines.map((wine) => {
+    const outdatedAt = wine.outdatedAt;
+    const currentDates =
+      outdatedAt === undefined || outdatedAt === null
+        ? knownDates
+        : knownDates.filter((date) => date < outdatedAt);
+    return {
+      ...wine,
+      availability: summarizeAvailability(entriesFor(index, wine.id), currentDates),
+    };
+  });
 }
 
 export async function summarizeMonopolies(

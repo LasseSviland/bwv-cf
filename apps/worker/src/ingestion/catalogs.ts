@@ -1,4 +1,5 @@
 import {
+  DateStringSchema,
   MonopolyDetailSchema,
   MonopolySummarySchema,
   WineDetailSchema,
@@ -69,6 +70,34 @@ export function betterWinesOnly(wines: readonly JsonObject[]): JsonObject[] {
   return wines.filter(belongsToBetterWines);
 }
 
+export function updatedOutdatedProducts(
+  previous: Readonly<Record<string, string>>,
+  mergedWines: readonly JsonObject[],
+  currentWines: readonly JsonObject[],
+  detectedAt: string,
+): Record<string, string> {
+  const date = DateStringSchema.parse(detectedAt);
+  const currentProductIds = new Set(currentWines.map(wineProductId));
+  const outdated = new Map<string, string>();
+
+  for (const wine of mergedWines) {
+    const productId = wineProductId(wine);
+    if (!currentProductIds.has(productId)) {
+      outdated.set(productId, previous[productId] ?? date);
+    }
+  }
+
+  return Object.fromEntries(
+    [...outdated].sort(([left], [right]) => left.localeCompare(right, "en", { numeric: true })),
+  );
+}
+
+export function activeWineSources(file: WineCatalogFile): JsonObject[] {
+  return betterWinesOnly(file.wines).filter(
+    (wine) => file.outdatedProducts[wineProductId(wine)] === undefined,
+  );
+}
+
 function monopolyStoreId(monopoly: JsonObject): string {
   const storeId = nestedString(monopoly, "storeId");
   if (storeId === null) throw new PermanentQueueError("Vinmonopolet store is missing storeId");
@@ -121,7 +150,10 @@ function assortmentGradesFromSource(wine: JsonObject): string[] {
     : [];
 }
 
-export function wineSummaryFromSource(wine: JsonObject): WineSummary {
+export function wineSummaryFromSource(
+  wine: JsonObject,
+  outdatedAt: string | null = null,
+): WineSummary {
   const productNumber = wineProductId(wine);
   const name =
     nestedString(wine, "basic", "productLongName") ??
@@ -138,6 +170,7 @@ export function wineSummaryFromSource(wine: JsonObject): WineSummary {
       nestedString(wine, "assortment", "assortment") ??
       nestedString(wine, "legacyDatabase", "produktutvalg"),
     assortmentGrades,
+    outdatedAt,
   });
 }
 
@@ -159,9 +192,12 @@ export function monopolySummaryFromSource(monopoly: JsonObject): MonopolySummary
   });
 }
 
-export function wineDetailFromSource(wine: JsonObject): WineDetail {
+export function wineDetailFromSource(
+  wine: JsonObject,
+  outdatedAt: string | null = null,
+): WineDetail {
   return WineDetailSchema.parse({
-    ...wineSummaryFromSource(wine),
+    ...wineSummaryFromSource(wine, outdatedAt),
     sourceData: wine,
   });
 }
@@ -194,6 +230,7 @@ export async function syncMonopolies(
 export async function syncWines(
   env: Env,
   syncedAt: string,
+  detectedAt: string,
   fetchFn: FetchFunction = fetch,
 ): Promise<WineCatalogFile> {
   const current = await fetchAllBetterWines(env.VINMONOPOLET_RESTRICTED_API_KEY, fetchFn);
@@ -201,12 +238,19 @@ export async function syncWines(
     throw new Error(`Vinmonopolet returned no wines for ${BETTER_WINES_WHOLESALER}`);
   }
   const previous = await getOptionalJson(env.DATA_BUCKET, WINES_KEY, parseWineCatalogFile);
+  const wines = betterWinesOnly(mergeWines(previous?.wines ?? [], current));
   const file: WineCatalogFile = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     syncedAt,
     source: "vinmonopolet/my-products/v1/details-normal",
     wholesaler: BETTER_WINES_WHOLESALER,
-    wines: betterWinesOnly(mergeWines(previous?.wines ?? [], current)),
+    wines,
+    outdatedProducts: updatedOutdatedProducts(
+      previous?.outdatedProducts ?? {},
+      wines,
+      current,
+      detectedAt,
+    ),
   };
   await putJson(env.DATA_BUCKET, WINES_KEY, file);
   return file;
@@ -222,7 +266,15 @@ export function getRawMonopolyCatalog(env: Env): Promise<MonopolyCatalogFile> {
 
 export async function getWineCatalog(env: Env): Promise<WineSummary[]> {
   const file = await getRawWineCatalog(env);
-  return betterWinesOnly(file.wines).map(wineSummaryFromSource);
+  return activeWineSources(file).map((wine) => wineSummaryFromSource(wine));
+}
+
+export async function getSearchableWineCatalog(env: Env): Promise<WineSummary[]> {
+  const file = await getRawWineCatalog(env);
+  return betterWinesOnly(file.wines).map((wine) => {
+    const outdatedAt = file.outdatedProducts[wineProductId(wine)] ?? null;
+    return wineSummaryFromSource(wine, outdatedAt);
+  });
 }
 
 export async function getMonopolyCatalog(env: Env): Promise<MonopolySummary[]> {
@@ -235,7 +287,9 @@ export async function getWineDetail(env: Env, wineId: number): Promise<WineDetai
   const wine = betterWinesOnly(file.wines).find(
     (candidate) => numericId(wineProductId(candidate), "Wine product id") === wineId,
   );
-  return wine === undefined ? null : wineDetailFromSource(wine);
+  return wine === undefined
+    ? null
+    : wineDetailFromSource(wine, file.outdatedProducts[wineProductId(wine)] ?? null);
 }
 
 export async function getMonopolyDetail(

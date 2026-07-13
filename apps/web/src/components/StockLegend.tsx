@@ -3,6 +3,7 @@ interface StockLegendProps {
   showSoldOut?: boolean;
   showAdditional?: boolean;
   showUnknown?: boolean;
+  showHistorical?: boolean;
   showUnavailable?: boolean;
 }
 
@@ -11,6 +12,7 @@ export const StockLegend = ({
   showSoldOut = false,
   showAdditional = false,
   showUnknown = false,
+  showHistorical = false,
   showUnavailable = false,
 }: StockLegendProps) => (
   <div
@@ -48,6 +50,15 @@ export const StockLegend = ({
           aria-hidden="true"
         />
         Assortment not classified
+      </span>
+    ) : null}
+    {showHistorical ? (
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          className="size-2.5 rounded-full bg-stone-500 ring-4 ring-stone-100"
+          aria-hidden="true"
+        />
+        Historical record · not a current assortment expectation
       </span>
     ) : null}
     {showUnavailable ? (

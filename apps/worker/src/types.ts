@@ -13,11 +13,13 @@ export interface MonopolyCatalogFile {
 }
 
 export interface WineCatalogFile {
-  schemaVersion: 1;
+  schemaVersion: 2;
   syncedAt: string;
   source: "vinmonopolet/my-products/v1/details-normal";
   wholesaler: "Better Wines AS";
   wines: JsonObject[];
+  /** First Oslo date on which each retained product was absent from My Products. */
+  outdatedProducts: Record<string, string>;
 }
 
 export interface DailyInventoryFile {

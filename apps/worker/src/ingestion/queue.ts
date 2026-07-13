@@ -1,4 +1,5 @@
 import { SyncQueueMessageSchema, type SyncQueueMessage } from "@bwv/contracts";
+import { dateInOslo } from "@bwv/data-format";
 
 import { errorMessage, isPermanentQueueError } from "../errors";
 import { logError, logInfo } from "../log";
@@ -25,10 +26,12 @@ export async function processQueueMessage(
   fetchFn: FetchFunction = fetch,
   now: () => Date = () => new Date(),
 ): Promise<QueueProcessResult> {
-  const syncedAt = now().toISOString();
+  const syncInstant = now();
+  const syncedAt = syncInstant.toISOString();
+  const detectedAt = dateInOslo(syncInstant);
 
   // Product details are refreshed first so every later step uses the merged catalog.
-  const wineFile = await syncWines(env, syncedAt, fetchFn);
+  const wineFile = await syncWines(env, syncedAt, detectedAt, fetchFn);
 
   // Store details are merged for the same reason: changed/new records win and removed stores remain.
   const monopolyFile = await syncMonopolies(env, syncedAt, fetchFn);

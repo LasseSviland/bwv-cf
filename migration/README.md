@@ -115,6 +115,7 @@ The upload behavior is deliberately conservative:
 - Existing Cloudflare wine/store catalogs are downloaded and merged locally first.
 - Current API fields win for matching records while historic records and omitted legacy fields are retained.
 - The merged wine catalog is filtered again to `Better Wines AS`.
+- Existing `outdatedProducts` dates are preserved. Legacy-only products added to an existing current catalog are marked outdated at the merge date instead of being resurrected into active API and statistics views.
 - Existing daily inventory objects are skipped, so current Vinmonopolet API snapshots are never replaced by default.
 - New inventory objects use `If-None-Match: *` to close races with the daily Worker sync.
 - Inventory is uploaded first and the two merged catalogs are committed last.

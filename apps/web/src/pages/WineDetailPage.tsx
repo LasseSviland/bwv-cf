@@ -79,10 +79,17 @@ export const WineDetailPage = () => {
     const data = request.data;
     if (!data) return [];
     const query = filter.trim().toLocaleLowerCase();
+    const historical = data.wine.outdatedAt !== undefined && data.wine.outdatedAt !== null;
     return data.monopolies
       .map((entry) => ({
         ...entry,
-        assortment: classifyWineForStore(data.wine, entry.monopoly),
+        assortment: historical
+          ? {
+              status: "historical" as const,
+              explanation:
+                "Recorded before this product left the current Vinmonopolet catalogue; no assortment expectation is inferred.",
+            }
+          : classifyWineForStore(data.wine, entry.monopoly),
       }))
       .filter(
         ({ inventory, assortment }) =>
@@ -146,6 +153,7 @@ export const WineDetailPage = () => {
   if (!request.data) return null;
 
   const { wine } = request.data;
+  const outdatedAt = wine.outdatedAt ?? null;
   const freshness: Freshness = request.data;
   const latestDate = latestAvailableDate(
     request.data.period.from,
@@ -240,6 +248,13 @@ export const WineDetailPage = () => {
         }
         summary={
           <div className="space-y-3 border-t border-border/75 pt-4">
+            {outdatedAt ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <strong className="font-semibold">Outdated product.</strong> It was no longer in the
+                current My Products catalogue on {formatDate(outdatedAt)} and is excluded from
+                portfolio and monopoly statistics. This page retains its historical inventory dates.
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
               {originLabel ? (
                 <p>
@@ -262,26 +277,34 @@ export const WineDetailPage = () => {
               ) : null}
             </div>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-border/60 pt-3 sm:grid-cols-6">
-              {[
-                {
-                  label: "Fixed stores stocked",
-                  value: fixedStoresInStock.toLocaleString("en-GB"),
-                },
-                {
-                  label: "Non-fixed stores stocked",
-                  value: nonFixedStoresInStock.toLocaleString("en-GB"),
-                },
-                {
-                  label: "Stores in stock",
-                  value: `${storesInStock.toLocaleString("en-GB")} / ${request.data.monopolies.length.toLocaleString("en-GB")}`,
-                },
-                {
-                  label: "Sold out",
-                  value: expectedSoldOut.toLocaleString("en-GB"),
-                },
-                ...(priceLabel ? [{ label: "Current price", value: priceLabel }] : []),
-                ...(latestDate ? [{ label: "Updated", value: formatDate(latestDate) }] : []),
-              ].map((item) => (
+              {(outdatedAt
+                ? [
+                    { label: "Outdated since", value: formatDate(outdatedAt) },
+                    ...(latestDate
+                      ? [{ label: "Last inventory date", value: formatDate(latestDate) }]
+                      : []),
+                  ]
+                : [
+                    {
+                      label: "Fixed stores stocked",
+                      value: fixedStoresInStock.toLocaleString("en-GB"),
+                    },
+                    {
+                      label: "Non-fixed stores stocked",
+                      value: nonFixedStoresInStock.toLocaleString("en-GB"),
+                    },
+                    {
+                      label: "Stores in stock",
+                      value: `${storesInStock.toLocaleString("en-GB")} / ${request.data.monopolies.length.toLocaleString("en-GB")}`,
+                    },
+                    {
+                      label: "Sold out",
+                      value: expectedSoldOut.toLocaleString("en-GB"),
+                    },
+                    ...(priceLabel ? [{ label: "Current price", value: priceLabel }] : []),
+                    ...(latestDate ? [{ label: "Updated", value: formatDate(latestDate) }] : []),
+                  ]
+              ).map((item) => (
                 <div className="min-w-0" key={item.label}>
                   <dt className="flex min-h-8 items-end text-[0.68rem] leading-tight font-medium tracking-wide text-muted-foreground uppercase">
                     {item.label}
@@ -330,13 +353,17 @@ export const WineDetailPage = () => {
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/55 px-3 py-2 font-normal">
-            <Checkbox
-              checked={soldOutOnly}
-              onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
-            />
-            Only sold-out fixed-assortment stores
-          </Label>
+          {outdatedAt ? (
+            <span>Only historical stock records before {formatDate(outdatedAt)} are shown.</span>
+          ) : (
+            <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/55 px-3 py-2 font-normal">
+              <Checkbox
+                checked={soldOutOnly}
+                onCheckedChange={(checked) => setSoldOutOnly(checked === true)}
+              />
+              Only sold-out fixed-assortment stores
+            </Label>
+          )}
           <span className="font-medium">{rows.length} stores shown</span>
         </div>
       </section>
@@ -346,57 +373,77 @@ export const WineDetailPage = () => {
         <ErrorState error={request.error} onRetry={request.reload} />
       ) : null}
 
-      <InventoryMatrix
-        rows={fixedAssortmentRows}
-        from={request.data.period.from}
-        to={request.data.period.to}
-        entityLabel="Monopoly"
-        emptyTitle={
-          filter
-            ? "No matching stores"
-            : soldOutOnly
-              ? "No fixed-assortment stores were sold out"
-              : "No stores carried this wine"
-        }
-        emptyDescription={
-          filter
-            ? "Clear the store filter or try a different name."
-            : soldOutOnly
-              ? "This wine stayed in stock at every store where it belongs to the fixed assortment."
-              : "Choose another period to look for earlier or later availability."
-        }
-        freshness={freshness}
-        title="Fixed-assortment availability"
-        description="Stores where this wine belongs to the fixed assortment. Newest dates appear first."
-      />
-
-      {!soldOutOnly && additionalRows.length > 0 ? (
+      {outdatedAt ? (
         <InventoryMatrix
-          rows={additionalRows}
+          rows={rows}
           from={request.data.period.from}
           to={request.data.period.to}
           entityLabel="Monopoly"
-          emptyTitle="No stores outside the fixed assortment"
-          emptyDescription="This wine was not found as optional local stock in the selected period."
+          emptyTitle={filter ? "No matching stores" : "No historical inventory in this period"}
+          emptyDescription={
+            filter
+              ? "Clear the store filter or try a different name."
+              : "Choose a period before the product left the current catalogue."
+          }
           freshness={freshness}
-          title="Not part of the fixed assortment"
-          description="Stores carrying this wine as optional local stock. A zero does not mean sold out."
+          title="Historical inventory"
+          description={`Recorded stock before ${formatDate(outdatedAt)}. Later dates are unavailable for this product and are never interpreted as sold out.`}
         />
-      ) : null}
+      ) : (
+        <>
+          <InventoryMatrix
+            rows={fixedAssortmentRows}
+            from={request.data.period.from}
+            to={request.data.period.to}
+            entityLabel="Monopoly"
+            emptyTitle={
+              filter
+                ? "No matching stores"
+                : soldOutOnly
+                  ? "No fixed-assortment stores were sold out"
+                  : "No stores carried this wine"
+            }
+            emptyDescription={
+              filter
+                ? "Clear the store filter or try a different name."
+                : soldOutOnly
+                  ? "This wine stayed in stock at every store where it belongs to the fixed assortment."
+                  : "Choose another period to look for earlier or later availability."
+            }
+            freshness={freshness}
+            title="Fixed-assortment availability"
+            description="Stores where this wine belongs to the fixed assortment. Newest dates appear first."
+          />
 
-      {!soldOutOnly && unknownRows.length > 0 ? (
-        <InventoryMatrix
-          rows={unknownRows}
-          from={request.data.period.from}
-          to={request.data.period.to}
-          entityLabel="Monopoly"
-          emptyTitle="No unclassified stores"
-          emptyDescription="Every store has enough category data to classify this wine."
-          freshness={freshness}
-          title="Assortment not classified"
-          description="Stores missing the category or profile data needed to infer whether this wine is part of their fixed assortment."
-        />
-      ) : null}
+          {!soldOutOnly && additionalRows.length > 0 ? (
+            <InventoryMatrix
+              rows={additionalRows}
+              from={request.data.period.from}
+              to={request.data.period.to}
+              entityLabel="Monopoly"
+              emptyTitle="No stores outside the fixed assortment"
+              emptyDescription="This wine was not found as optional local stock in the selected period."
+              freshness={freshness}
+              title="Not part of the fixed assortment"
+              description="Stores carrying this wine as optional local stock. A zero does not mean sold out."
+            />
+          ) : null}
+
+          {!soldOutOnly && unknownRows.length > 0 ? (
+            <InventoryMatrix
+              rows={unknownRows}
+              from={request.data.period.from}
+              to={request.data.period.to}
+              entityLabel="Monopoly"
+              emptyTitle="No unclassified stores"
+              emptyDescription="Every store has enough category data to classify this wine."
+              freshness={freshness}
+              title="Assortment not classified"
+              description="Stores missing the category or profile data needed to infer whether this wine is part of their fixed assortment."
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 };

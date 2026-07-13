@@ -129,6 +129,41 @@ describe("CatalogBrowser", () => {
     expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy();
   });
 
+  it("reloads from the server for searches that can include historical records", async () => {
+    const load = vi.fn((_apiKey, values: { query?: string }) =>
+      Promise.resolve({
+        items: values.query ? ["Old Barolo"] : ["Current Barbera"],
+        nextCursor: null,
+      }),
+    );
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <CatalogBrowser
+          kind="wines"
+          title="Wines"
+          searchLabel="Search wines"
+          searchPlaceholder="Search"
+          emptyTitle="No wines"
+          emptyDescription="Nothing found"
+          itemKey={(item) => item}
+          load={load}
+          searchOnServer
+          renderItem={(item) => <span>{item}</span>}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Current Barbera")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search wines" }), {
+      target: { value: "Old" },
+    });
+
+    expect(await screen.findByText("Old Barolo")).toBeTruthy();
+    await waitFor(() =>
+      expect(load.mock.calls.some(([, values]) => values.query === "Old")).toBe(true),
+    );
+  });
+
   it("sorts the complete result set with the selected dropdown option", async () => {
     const items = [
       { name: "Alpha", stock: 2 },

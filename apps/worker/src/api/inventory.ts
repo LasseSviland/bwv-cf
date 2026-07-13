@@ -10,7 +10,11 @@ import type {
 import { monthsForPeriod } from "@bwv/data-format";
 
 import { HttpError } from "../errors";
-import { getMonopolyCatalog, getWineCatalog } from "../ingestion/catalogs";
+import {
+  getMonopolyCatalog,
+  getSearchableWineCatalog,
+  getWineCatalog,
+} from "../ingestion/catalogs";
 import type { CompletedInventoryDate } from "../types";
 import { getCompletedDates, loadInventoryObservations } from "./daily-inventory";
 import { isWineRequiredAtStore } from "./statistics";
@@ -50,8 +54,10 @@ export function buildWineMonopolySeries(
   knownDates: readonly string[],
 ): WineInventoryResponse["monopolies"] {
   const includedMonopolyIds = new Set(observedSeries.keys());
-  for (const monopoly of monopolies) {
-    if (isWineRequiredAtStore(wine, monopoly)) includedMonopolyIds.add(monopoly.id);
+  if (wine.outdatedAt === undefined || wine.outdatedAt === null) {
+    for (const monopoly of monopolies) {
+      if (isWineRequiredAtStore(wine, monopoly)) includedMonopolyIds.add(monopoly.id);
+    }
   }
 
   return monopolies
@@ -88,8 +94,21 @@ function etagSeed(
   id: number,
   period: Period,
   completed: readonly CompletedInventoryDate[],
+  catalogRevision = "",
 ): string {
-  return `${kind}:${id}:${period.from}:${period.to}:${completed.map(({ etag }) => etag).join(":")}`;
+  return `${kind}:${id}:${period.from}:${period.to}:${catalogRevision}:${completed
+    .map(({ etag }) => etag)
+    .join(":")}`;
+}
+
+export function completedWhileWineCurrent(
+  wine: WineSummary,
+  completed: readonly CompletedInventoryDate[],
+): CompletedInventoryDate[] {
+  const outdatedAt = wine.outdatedAt;
+  return outdatedAt === undefined || outdatedAt === null
+    ? [...completed]
+    : completed.filter(({ date }) => date < outdatedAt);
 }
 
 export async function assembleWineInventory(
@@ -98,7 +117,7 @@ export async function assembleWineInventory(
   period: Period,
 ): Promise<{ etagSeed: string; response: WineInventoryResponse }> {
   const [wines, monopolies, completed] = await Promise.all([
-    getWineCatalog(env),
+    getSearchableWineCatalog(env),
     getMonopolyCatalog(env),
     getCompletedDates(env.DATA_BUCKET, period),
   ]);
@@ -108,7 +127,8 @@ export async function assembleWineInventory(
     monopolies.map((monopoly) => [monopoly.storeNumber, monopoly]),
   );
   const series = new Map<number, DailyInventory[]>();
-  const knownDates = completed.map(({ date }) => date);
+  const inventoryDates = completedWhileWineCurrent(wine, completed);
+  const knownDates = inventoryDates.map(({ date }) => date);
   const observations = await loadInventoryObservations(env.DATA_BUCKET, knownDates, [
     wine.productNumber,
   ]);
@@ -122,11 +142,15 @@ export async function assembleWineInventory(
 
   const response: WineInventoryResponse = {
     ...freshnessFor(period, completed),
+    availableDates: knownDates,
     wine,
     period,
     monopolies: buildWineMonopolySeries(wine, monopolies, series, knownDates),
   };
-  return { response, etagSeed: etagSeed("wine", wineId, period, completed) };
+  return {
+    response,
+    etagSeed: etagSeed("wine", wineId, period, completed, wine.outdatedAt ?? "active"),
+  };
 }
 
 export async function assembleMonopolyInventory(

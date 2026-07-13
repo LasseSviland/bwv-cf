@@ -31,6 +31,7 @@ interface CatalogBrowserProps<T> {
   itemKey: (item: T) => string | number;
   searchText?: (item: T) => string;
   searchFields?: (item: T) => string[];
+  searchOnServer?: boolean;
   pageSize?: number;
   load: (
     apiKey: string,
@@ -138,6 +139,7 @@ export const CatalogBrowser = <T,>({
   itemKey,
   searchText = (item) => String(item),
   searchFields = (item) => [searchText(item)],
+  searchOnServer = false,
   pageSize = DISPLAY_PAGE_SIZE,
   load,
   sortItems,
@@ -160,6 +162,7 @@ export const CatalogBrowser = <T,>({
   const [revision, setRevision] = useState(0);
   const [sortValue, setSortValue] = useState(defaultSort ?? sortOptions[0]?.value ?? "");
   const activeSort = sortOptions.find(({ value }) => value === sortValue)?.compare ?? sortItems;
+  const requestQuery = searchOnServer ? query.trim() : "";
 
   useEffect(() => {
     if (!apiKey) return;
@@ -177,7 +180,7 @@ export const CatalogBrowser = <T,>({
         const result = await load(
           apiKey,
           {
-            query: undefined,
+            query: requestQuery || undefined,
             cursor,
             limit: pageSize,
             from: requestPeriod.from,
@@ -203,9 +206,9 @@ export const CatalogBrowser = <T,>({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-    // `load` is a stable API method; query and revision are the request identity.
+    // `load` is a stable API method; server query and revision are the request identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, pageSize, requestPeriod.from, requestPeriod.to, revision]);
+  }, [apiKey, pageSize, requestPeriod.from, requestPeriod.to, requestQuery, revision]);
 
   const sortedItems = useMemo(
     () => rankSearchItems(items, query, searchFields, activeSort),

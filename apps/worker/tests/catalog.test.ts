@@ -10,11 +10,19 @@ import {
   searchWineCatalog,
 } from "../src/api/catalog";
 import {
+  activeWineSources,
   betterWinesOnly,
+  getSearchableWineCatalog,
+  getWineCatalog,
+  getWineDetail,
+  mergeWines,
   monopolyDetailFromSource,
+  updatedOutdatedProducts,
   wineDetailFromSource,
 } from "../src/ingestion/catalogs";
-import type { JsonObject } from "../src/types";
+import type { JsonObject, WineCatalogFile } from "../src/types";
+import { WINES_KEY } from "../src/storage/keys";
+import { MemoryR2 } from "./r2-fixture";
 
 const wines: WineSummary[] = [
   {
@@ -117,6 +125,98 @@ describe("entity details", () => {
     expect(betterWinesOnly(catalog).map((wine) => wine.basic)).toEqual([
       { productId: "100", productLongName: "Better Wines bottle" },
     ]);
+  });
+
+  it("keeps outdated products in the file while excluding them from the active catalog", () => {
+    const previous = [
+      {
+        basic: { productId: "100", productLongName: "Current wine" },
+        logistics: { wholesalerName: "Better Wines AS" },
+      },
+      {
+        basic: { productId: "999", productLongName: "Old wine" },
+        logistics: { wholesalerName: "Better Wines AS" },
+      },
+    ] satisfies JsonObject[];
+    const current = [
+      {
+        basic: { productId: "100", productLongName: "Current wine" },
+        logistics: { wholesalerName: "Better Wines AS" },
+      },
+    ] satisfies JsonObject[];
+    const merged = mergeWines(previous, current);
+    const outdatedProducts = updatedOutdatedProducts({}, merged, current, "2026-07-13");
+    const file: WineCatalogFile = {
+      schemaVersion: 2,
+      syncedAt: "2026-07-13T08:00:00Z",
+      source: "vinmonopolet/my-products/v1/details-normal",
+      wholesaler: "Better Wines AS",
+      wines: merged,
+      outdatedProducts,
+    };
+
+    expect(file.wines).toHaveLength(2);
+    expect(file.outdatedProducts).toEqual({ "999": "2026-07-13" });
+    expect(activeWineSources(file).map((wine) => wine.basic)).toEqual([
+      { productId: "100", productLongName: "Current wine" },
+    ]);
+  });
+
+  it("preserves the first detection date and clears it when a product returns", () => {
+    const current = [
+      {
+        basic: { productId: "999", productLongName: "Returning wine" },
+        logistics: { wholesalerName: "Better Wines AS" },
+      },
+    ] satisfies JsonObject[];
+    expect(
+      updatedOutdatedProducts(
+        { "100": "2026-07-01", "999": "2026-07-02" },
+        [
+          {
+            basic: { productId: "100", productLongName: "Still absent" },
+            logistics: { wholesalerName: "Better Wines AS" },
+          },
+          ...current,
+        ],
+        current,
+        "2026-07-13",
+      ),
+    ).toEqual({ "100": "2026-07-01" });
+  });
+
+  it("returns outdated products only from searchable and direct-detail catalog reads", async () => {
+    const r2 = new MemoryR2();
+    r2.seed(WINES_KEY, {
+      schemaVersion: 2,
+      syncedAt: "2026-07-13T08:00:00Z",
+      source: "vinmonopolet/my-products/v1/details-normal",
+      wholesaler: "Better Wines AS",
+      wines: [
+        {
+          basic: { productId: "100", productLongName: "Current wine" },
+          logistics: { wholesalerName: "Better Wines AS" },
+        },
+        {
+          basic: { productId: "999", productLongName: "Historical wine" },
+          logistics: { wholesalerName: "Better Wines AS" },
+        },
+      ],
+      outdatedProducts: { "999": "2026-07-13" },
+    });
+    const env = { DATA_BUCKET: r2.bucket } as unknown as Env;
+
+    await expect(getWineCatalog(env)).resolves.toMatchObject([
+      { productNumber: "100", outdatedAt: null },
+    ]);
+    await expect(getSearchableWineCatalog(env)).resolves.toMatchObject([
+      { productNumber: "100", outdatedAt: null },
+      { productNumber: "999", outdatedAt: "2026-07-13" },
+    ]);
+    await expect(getWineDetail(env, 999)).resolves.toMatchObject({
+      productNumber: "999",
+      outdatedAt: "2026-07-13",
+    });
   });
 
   it("preserves the complete wine source record in the API detail shape", () => {

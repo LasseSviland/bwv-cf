@@ -106,8 +106,14 @@ describe("single-message sync", () => {
     ]);
     expect(urls.every((value) => new URL(value).search === "")).toBe(true);
 
-    const wineFile = r2.values.get(WINES_KEY) as { wines: JsonObject[] };
+    const wineFile = r2.values.get(WINES_KEY) as {
+      schemaVersion: number;
+      wines: JsonObject[];
+      outdatedProducts: Record<string, string>;
+    };
+    expect(wineFile.schemaVersion).toBe(2);
     expect(wineFile.wines).toHaveLength(3);
+    expect(wineFile.outdatedProducts).toEqual({ "999": "2026-07-13" });
     expect(
       wineFile.wines.find((value) => value.basic && JSON.stringify(value).includes("100")),
     ).toMatchObject({
@@ -121,6 +127,33 @@ describe("single-message sync", () => {
       expect.objectContaining({ storeId: "99", storeName: "Deleted store" }),
     );
     expect(r2.values.get(dailyInventoryKey("2026-07-13"))).toMatchObject({ products: stock });
+  });
+
+  it("preserves the first outdated date and reactivates products that return", async () => {
+    const r2 = new MemoryR2();
+    r2.seed(WINES_KEY, {
+      schemaVersion: 2,
+      syncedAt: "2026-07-10T08:00:00.000Z",
+      source: "vinmonopolet/my-products/v1/details-normal",
+      wholesaler: "Better Wines AS",
+      wines: [wine("100", "Current wine"), wine("999", "Returning wine")],
+      outdatedProducts: { "100": "2026-07-09", "999": "2026-07-10" },
+    });
+    const fetchFn = vi.fn((input: RequestInfo | URL) => {
+      const path = requestUrl(input).pathname;
+      if (path.endsWith("/details-normal")) {
+        return Promise.resolve(Response.json([wine("999", "Returning wine")]));
+      }
+      if (path.endsWith("/stores/v0/details")) {
+        return Promise.resolve(Response.json([monopoly("10", "Store")]));
+      }
+      return Promise.resolve(Response.json([]));
+    });
+
+    await processQueueMessage(message, envFor(r2), fetchFn, () => new Date("2026-07-13T22:30:00Z"));
+
+    const file = r2.values.get(WINES_KEY) as { outdatedProducts: Record<string, string> };
+    expect(file.outdatedProducts).toEqual({ "100": "2026-07-09" });
   });
 
   it("always refreshes both catalogs but skips an existing daily inventory file", async () => {

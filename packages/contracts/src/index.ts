@@ -98,6 +98,8 @@ export const WineSummarySchema = z
     wineCategory: z.string().trim().min(1).max(100).nullable().optional(),
     assortment: z.string().trim().min(1).max(200).nullable().optional(),
     assortmentGrades: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    /** First date the product was absent from the current My Products catalogue. */
+    outdatedAt: DateStringSchema.nullable().optional(),
   })
   .strict();
 export type WineSummary = z.infer<typeof WineSummarySchema>;

@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { DailyInventory, MonopolySummary, WineSummary } from "@bwv/contracts";
 
-import { buildMonopolyWineSeries, buildWineMonopolySeries } from "../src/api/inventory";
+import {
+  assembleMonopolyInventory,
+  assembleWineInventory,
+  buildMonopolyWineSeries,
+  buildWineMonopolySeries,
+  completedWhileWineCurrent,
+} from "../src/api/inventory";
+import { MONOPOLIES_KEY, WINES_KEY, dailyInventoryKey } from "../src/storage/keys";
+import { MemoryR2 } from "./r2-fixture";
 
 const wines: WineSummary[] = [
   {
@@ -85,5 +93,80 @@ describe("detail inventory series", () => {
       { date: "2026-07-12", count: 0 },
       { date: "2026-07-13", count: 0 },
     ]);
+  });
+
+  it("keeps only observed stores and dates from before an outdated product was detected", () => {
+    const outdatedWine: WineSummary = { ...wines[1]!, outdatedAt: "2026-07-13" };
+    const observed = new Map<number, readonly DailyInventory[]>([
+      [10, [{ date: "2026-07-12", count: 3 }]],
+    ]);
+
+    expect(buildWineMonopolySeries(outdatedWine, stores, observed, ["2026-07-12"])).toEqual([
+      {
+        monopoly: stores[0],
+        inventory: [{ date: "2026-07-12", count: 3 }],
+      },
+    ]);
+    expect(
+      completedWhileWineCurrent(outdatedWine, [
+        { date: "2026-07-12", etag: "before", uploaded: new Date("2026-07-12T08:00:00Z") },
+        { date: "2026-07-13", etag: "after", uploaded: new Date("2026-07-13T08:00:00Z") },
+      ]).map(({ date }) => date),
+    ).toEqual(["2026-07-12"]);
+  });
+
+  it("serves outdated wine history directly but omits it from monopoly inventory", async () => {
+    const r2 = new MemoryR2();
+    r2.seed(WINES_KEY, {
+      schemaVersion: 2,
+      syncedAt: "2026-07-13T08:00:00.000Z",
+      source: "vinmonopolet/my-products/v1/details-normal",
+      wholesaler: "Better Wines AS",
+      wines: [
+        {
+          basic: { productId: "200", productLongName: "Historical wine" },
+          logistics: { wholesalerName: "Better Wines AS" },
+          assortment: { assortment: "Basisutvalget", assortmentGrades: [] },
+        },
+      ],
+      outdatedProducts: { "200": "2026-07-13" },
+    });
+    r2.seed(MONOPOLIES_KEY, {
+      schemaVersion: 1,
+      syncedAt: "2026-07-13T08:00:00.000Z",
+      source: "vinmonopolet/stores/v0/details",
+      monopolies: [{ storeId: "10", storeName: "Store" }],
+    });
+    r2.seed(dailyInventoryKey("2026-07-12"), {
+      schemaVersion: 1,
+      syncedAt: "2026-07-12T08:00:00.000Z",
+      date: "2026-07-12",
+      source: "vinmonopolet/my-products/v1/stock-per-store",
+      products: [{ productId: "200", stock: [{ storeId: "10", storeStock: 3 }] }],
+    });
+    r2.seed(dailyInventoryKey("2026-07-13"), {
+      schemaVersion: 1,
+      syncedAt: "2026-07-13T08:00:00.000Z",
+      date: "2026-07-13",
+      source: "vinmonopolet/my-products/v1/stock-per-store",
+      products: [{ productId: "200", stock: [{ storeId: "10", storeStock: 2 }] }],
+    });
+    const env = { DATA_BUCKET: r2.bucket } as unknown as Env;
+    const period = { from: "2026-07-12", to: "2026-07-13" } as const;
+
+    const wineResult = await assembleWineInventory(env, 200, period);
+    expect(wineResult.response).toMatchObject({
+      wine: { productNumber: "200", outdatedAt: "2026-07-13" },
+      availableDates: ["2026-07-12"],
+      monopolies: [
+        {
+          monopoly: { storeNumber: "10" },
+          inventory: [{ date: "2026-07-12", count: 3 }],
+        },
+      ],
+    });
+
+    const monopolyResult = await assembleMonopolyInventory(env, 10, period);
+    expect(monopolyResult.response.wines).toEqual([]);
   });
 });

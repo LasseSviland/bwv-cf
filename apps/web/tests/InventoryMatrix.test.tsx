@@ -145,4 +145,45 @@ describe("InventoryMatrix", () => {
     expect(screen.queryByText("Data unavailable")).toBeNull();
     expect(screen.getByText("Additional product · optional local stock")).toBeTruthy();
   });
+
+  it("renders outdated-product history without inferring sold-out dates", () => {
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <InventoryMatrix
+          rows={[
+            {
+              id: "7",
+              label: "Historical Barolo",
+              assortmentStatus: "historical",
+              assortmentNote: "Retained historical inventory only.",
+              href: "/wines/7",
+              inventory: [{ date: "2026-07-11", count: 3 }],
+            },
+          ]}
+          from="2026-07-11"
+          to="2026-07-13"
+          entityLabel="Wine"
+          emptyTitle="No wines"
+          emptyDescription="No inventory"
+          freshness={{
+            coveredThrough: "2026-07-13",
+            availableDates: ["2026-07-11", "2026-07-12"],
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    const table = screen.getByRole("table");
+    expect(
+      within(table).getByLabelText("11 Jul 2026: 3 bottles in stock; historical record"),
+    ).toBeTruthy();
+    expect(
+      within(table).getByLabelText("12 Jul 2026: no recorded stock; historical record"),
+    ).toBeTruthy();
+    expect(within(table).getByLabelText("13 Jul 2026: data unavailable")).toBeTruthy();
+    expect(within(table).queryByLabelText(/sold out/i)).toBeNull();
+    expect(
+      screen.getByText("Historical record · not a current assortment expectation"),
+    ).toBeTruthy();
+  });
 });

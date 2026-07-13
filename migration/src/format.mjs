@@ -30,6 +30,23 @@ function validIsoDate(value) {
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+function osloDateFromTimestamp(value) {
+  const instant = new Date(value);
+  if (Number.isNaN(instant.valueOf())) {
+    throw new Error("The merged wine catalog timestamp is invalid");
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Oslo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(instant);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value ?? "";
+  const date = `${part("year")}-${part("month")}-${part("day")}`;
+  if (!validIsoDate(date)) throw new Error("The merged wine catalog timestamp is invalid");
+  return date;
+}
+
 export function sourceDateToIso(value) {
   const source = String(value);
   const iso = /^\d{8}$/.test(source)
@@ -125,34 +142,63 @@ function mergeRecords(historic, current, keyOf) {
     .map(([, record]) => record);
 }
 
+function outdatedProductsFromCatalog(catalog, context) {
+  if (catalog.schemaVersion === 1) return {};
+  if (catalog.schemaVersion !== 2 || !isPlainObject(catalog.outdatedProducts)) {
+    throw new Error(`${context} wine catalog is invalid`);
+  }
+  const outdatedProducts = {};
+  for (const [productId, date] of Object.entries(catalog.outdatedProducts)) {
+    const normalizedProductId = identifierString(productId, `${context} outdated product id`);
+    if (!validIsoDate(date)) {
+      throw new Error(`${context} outdated product ${normalizedProductId} has an invalid date`);
+    }
+    outdatedProducts[normalizedProductId] = date;
+  }
+  return outdatedProducts;
+}
+
+function validateWineCatalog(catalog, context) {
+  if (
+    (catalog.schemaVersion !== 1 && catalog.schemaVersion !== 2) ||
+    catalog.source !== WINE_SOURCE ||
+    catalog.wholesaler !== BETTER_WINES_WHOLESALER ||
+    !Array.isArray(catalog.wines)
+  ) {
+    throw new Error(`${context} wine catalog is invalid`);
+  }
+  return outdatedProductsFromCatalog(catalog, context);
+}
+
 export function mergeWineCatalogs(historic, current, syncedAt) {
-  if (
-    historic.schemaVersion !== 1 ||
-    historic.source !== WINE_SOURCE ||
-    historic.wholesaler !== BETTER_WINES_WHOLESALER ||
-    !Array.isArray(historic.wines)
-  ) {
-    throw new Error("The prepared historic wine catalog is invalid");
-  }
-  if (
-    current !== null &&
-    (current.schemaVersion !== 1 ||
-      current.source !== WINE_SOURCE ||
-      current.wholesaler !== BETTER_WINES_WHOLESALER ||
-      !Array.isArray(current.wines))
-  ) {
-    throw new Error("The remote wine catalog is invalid");
-  }
+  const historicOutdated = validateWineCatalog(historic, "The prepared historic");
+  const currentOutdated = current === null ? {} : validateWineCatalog(current, "The remote");
   const wines = mergeRecords(historic.wines, current?.wines ?? [], productIdFromWine).filter(
     belongsToBetterWines,
   );
   if (wines.length === 0) throw new Error("The merged Better Wines catalog is empty");
+  const detectedAt = osloDateFromTimestamp(syncedAt);
+  const currentProductIds = new Set(
+    (current?.wines ?? []).filter(belongsToBetterWines).map(productIdFromWine),
+  );
+  const outdatedProducts = {};
+  for (const wine of wines) {
+    const productId = productIdFromWine(wine);
+    if (current === null) {
+      if (historicOutdated[productId]) outdatedProducts[productId] = historicOutdated[productId];
+      continue;
+    }
+    if (currentProductIds.has(productId) && currentOutdated[productId] === undefined) continue;
+    outdatedProducts[productId] =
+      currentOutdated[productId] ?? historicOutdated[productId] ?? detectedAt;
+  }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     syncedAt,
     source: WINE_SOURCE,
     wholesaler: BETTER_WINES_WHOLESALER,
     wines,
+    outdatedProducts,
   };
 }
 
@@ -203,11 +249,12 @@ async function prepareCatalogs(root, syncedAt) {
   if (monopolies.length === 0) throw new Error("The monopoly export is empty");
 
   await writeCompactJson(join(root, "cloudflare", WINES_KEY), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     syncedAt,
     source: WINE_SOURCE,
     wholesaler: BETTER_WINES_WHOLESALER,
     wines,
+    outdatedProducts: {},
   });
   await writeCompactJson(join(root, "cloudflare", MONOPOLIES_KEY), {
     schemaVersion: 1,

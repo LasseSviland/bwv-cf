@@ -126,6 +126,8 @@ describe("entity and inventory schemas", () => {
     expect(WineSummarySchema.safeParse({ ...wine, country: null }).success).toBe(true);
     expect(WineSummarySchema.safeParse({ ...wine, wineCategory: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, assortmentGrades: [" "] }).success).toBe(false);
+    expect(WineSummarySchema.safeParse({ ...wine, outdatedAt: "2026-02-30" }).success).toBe(false);
+    expect(WineSummarySchema.safeParse({ ...wine, outdatedAt: "2026-07-13" }).success).toBe(true);
     expect(WineSummarySchema.safeParse({ ...wine, secret: "no" }).success).toBe(false);
     expect(MonopolySummarySchema.safeParse({ ...monopoly, postalCode: "" }).success).toBe(false);
     expect(
