@@ -117,6 +117,7 @@ describe("entity and inventory schemas", () => {
       name: string;
     }>();
     expectTypeOf<WineSummary["wineCategory"]>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<WineSummary["producer"]>().toEqualTypeOf<string | null | undefined>();
     expectTypeOf<WineSummary["assortmentGrades"]>().toEqualTypeOf<string[] | undefined>();
   });
 
@@ -124,6 +125,7 @@ describe("entity and inventory schemas", () => {
     expect(WineSummarySchema.safeParse({ ...wine, id: 0 }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, name: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, country: null }).success).toBe(true);
+    expect(WineSummarySchema.safeParse({ ...wine, producer: null }).success).toBe(true);
     expect(WineSummarySchema.safeParse({ ...wine, wineCategory: " " }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, assortmentGrades: [" "] }).success).toBe(false);
     expect(WineSummarySchema.safeParse({ ...wine, outdatedAt: "2026-02-30" }).success).toBe(false);

@@ -81,6 +81,7 @@ const WineRow = memo(function WineRow({ wine, period }: { wine: WineCatalogItem;
 const wineSearchText = (wine: WineCatalogItem): string =>
   [
     wine.name,
+    wine.producer ?? "",
     wine.productNumber,
     wine.country ?? "",
     wine.wineCategory ?? "",
@@ -90,6 +91,7 @@ const wineSearchText = (wine: WineCatalogItem): string =>
 
 const wineSearchFields = (wine: WineCatalogItem): string[] => [
   wine.name,
+  wine.producer ?? "",
   wine.productNumber,
   wine.country ?? "",
   wine.wineCategory ?? "",
@@ -115,7 +117,7 @@ export const WinesPage = () => (
     title="Wines"
     description="Explore the current Better Wines portfolio. Search also finds retained historical products that have left the Vinmonopolet catalogue."
     searchLabel="Search wines"
-    searchPlaceholder="Search by wine name, product number or category"
+    searchPlaceholder="Search by wine name, producer, product number or category"
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
     itemKey={(wine) => wine.id}

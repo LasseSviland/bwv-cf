@@ -18,6 +18,39 @@ const CURSOR_VERSION = 1;
 const MAX_CURSOR_LENGTH = 2_048;
 const MAX_CURSOR_QUERY_LENGTH = 500;
 
+const SEARCH_TRANSLITERATIONS: Readonly<Record<string, string>> = {
+  æ: "ae",
+  đ: "d",
+  ð: "d",
+  ƒ: "f",
+  ħ: "h",
+  ı: "i",
+  ł: "l",
+  ŋ: "n",
+  ø: "o",
+  œ: "oe",
+  ß: "ss",
+  ŧ: "t",
+  þ: "th",
+};
+
+/**
+ * Produces the same accent-insensitive search representation in browsers and Workers.
+ * NFKD handles composed characters and compatibility forms; the explicit map covers
+ * common Latin letters which Unicode does not decompose into an ASCII base letter.
+ */
+export function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/\p{M}+/gu, "")
+    .replace(/[æđðƒħıłŋøœßŧþ]/gu, (character) => SEARCH_TRANSLITERATIONS[character] ?? character)
+    .replace(/['’‘ʻʼʹ＇]/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export const OSLO_TIME_ZONE = "Europe/Oslo";
 export const DEFAULT_MAX_PERIOD_DAYS = 366;
 

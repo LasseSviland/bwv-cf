@@ -29,6 +29,7 @@ const wines: WineSummary[] = [
     id: 1,
     productNumber: "100",
     name: "Bordeaux Rouge",
+    producer: "Château Dëmo",
     country: "Frankrike",
     wineCategory: "6",
   },
@@ -36,6 +37,7 @@ const wines: WineSummary[] = [
     id: 2,
     productNumber: "200",
     name: "Rioja Reserva",
+    producer: "Bodëgas Røda",
     country: "Spania",
     wineCategory: "5",
   },
@@ -75,6 +77,18 @@ describe("catalog query helpers", () => {
       1,
     ]);
     expect(searchWineCatalog(wines, "6", undefined, 10).items.map(({ id }) => id)).toEqual([1]);
+  });
+
+  it("normalizes wine names, producers, and queries before searching", () => {
+    expect(
+      searchWineCatalog(wines, "bodegas roda", undefined, 10).items.map(({ id }) => id),
+    ).toEqual([2]);
+    expect(
+      searchWineCatalog(wines, "BODËGAS RØDA", undefined, 10).items.map(({ id }) => id),
+    ).toEqual([2]);
+    expect(
+      searchWineCatalog(wines, "chateau demo", undefined, 10).items.map(({ id }) => id),
+    ).toEqual([1]);
   });
 
   it("paginates with a cursor bound to the normalized query", () => {
@@ -245,6 +259,7 @@ describe("entity details", () => {
       id: 20_491_401,
       productNumber: "20491401",
       name: "Pora Riserva",
+      producer: "Produttori",
       country: "Italia",
       wineCategory: "SB4L, SB5R",
       assortment: "Basisutvalget",

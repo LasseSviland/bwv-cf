@@ -94,6 +94,7 @@ export const WineSummarySchema = z
     id: EntityIdSchema,
     productNumber: ExternalNumberSchema,
     name: DisplayNameSchema,
+    producer: z.string().trim().min(1).max(500).nullable().optional(),
     country: z.string().trim().min(1).max(200).nullable().optional(),
     wineCategory: z.string().trim().min(1).max(100).nullable().optional(),
     assortment: z.string().trim().min(1).max(200).nullable().optional(),

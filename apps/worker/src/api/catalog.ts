@@ -1,14 +1,15 @@
 import type { CatalogResponse, MonopolySummary, WineSummary } from "@bwv/contracts";
-import { CursorError, nextCatalogCursor, resolveCatalogCursor } from "@bwv/data-format";
+import {
+  CursorError,
+  nextCatalogCursor,
+  normalizeSearchText,
+  resolveCatalogCursor,
+} from "@bwv/data-format";
 
 import { HttpError } from "../errors";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 1_000;
-
-function normalized(value: string): string {
-  return value.trim().toLocaleLowerCase("nb-NO");
-}
 
 export function parseEntityId(value: string): number {
   if (!/^[1-9]\d*$/.test(value)) throw new HttpError(400, "invalid_id", "Invalid entity id");
@@ -42,7 +43,7 @@ export function searchWineCatalog(
   cursor: string | undefined,
   limit: number,
 ): CatalogResponse<WineSummary> {
-  const query = normalized(queryValue ?? "");
+  const query = normalizeSearchText(queryValue ?? "");
   const offset = resolveOffset(cursor, query);
   const matches =
     query.length === 0
@@ -50,6 +51,7 @@ export function searchWineCatalog(
       : catalog.filter((wine) =>
           [
             wine.name,
+            wine.producer ?? "",
             wine.productNumber,
             wine.country ?? "",
             wine.wineCategory ?? "",
@@ -57,7 +59,7 @@ export function searchWineCatalog(
             ...(wine.assortmentGrades ?? []),
             wine.outdatedAt === undefined || wine.outdatedAt === null ? "" : "outdated",
           ]
-            .map(normalized)
+            .map(normalizeSearchText)
             .some((value) => value.includes(query)),
         );
   const items = matches.slice(offset, offset + limit);
@@ -78,7 +80,7 @@ export function searchMonopolyCatalog(
   cursor: string | undefined,
   limit: number,
 ): CatalogResponse<MonopolySummary> {
-  const query = normalized(queryValue ?? "");
+  const query = normalizeSearchText(queryValue ?? "");
   const offset = resolveOffset(cursor, query);
   const matches =
     query.length === 0
@@ -93,7 +95,7 @@ export function searchMonopolyCatalog(
             monopoly.monopolyProfile ?? "",
             monopoly.storeAssortment ?? "",
           ]
-            .map(normalized)
+            .map(normalizeSearchText)
             .some((value) => value.includes(query)),
         );
   const items = matches.slice(offset, offset + limit);

@@ -32,6 +32,7 @@ import {
   monthForDate,
   monthsForPeriod,
   nextCatalogCursor,
+  normalizeSearchText,
   parseDateString,
   parseMonth,
   previousMonthInOslo,
@@ -40,6 +41,20 @@ import {
   validateQueryPeriod,
   zeroFillInventorySeries,
 } from "../src/index.js";
+
+describe("search text normalization", () => {
+  it("folds composed, decomposed, and compatibility accents to the same search text", () => {
+    expect(normalizeSearchText("éëèêěẽ")).toBe("eeeeee");
+    expect(normalizeSearchText("e\u0301e\u0308e\u0300e\u0302e\u030Ce\u0303")).toBe("eeeeee");
+    expect(normalizeSearchText("Château D’Yquem – Cuvée № 1")).toBe("chateau dyquem cuvee no 1");
+  });
+
+  it("folds common Latin letters which do not have Unicode base-letter decompositions", () => {
+    expect(normalizeSearchText("Ærø Œuvre Łódź Straße Þórður")).toBe(
+      "aero oeuvre lodz strasse thordur",
+    );
+  });
+});
 
 describe("date parsing and arithmetic", () => {
   it("parses, formats, and narrows valid dates", () => {

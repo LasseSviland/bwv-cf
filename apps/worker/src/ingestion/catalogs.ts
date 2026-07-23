@@ -164,6 +164,10 @@ export function wineSummaryFromSource(
     id: numericId(productNumber, `Wine productId ${productNumber}`),
     productNumber,
     name,
+    producer:
+      nestedString(wine, "basic", "manufacturerName") ??
+      nestedString(wine, "logistics", "manufacturerName") ??
+      nestedString(wine, "legacyDatabase", "produsent"),
     country: nestedString(wine, "origins", "origin", "country"),
     wineCategory: assortmentGrades.length > 0 ? assortmentGrades.join(", ") : null,
     assortment:

@@ -1,4 +1,5 @@
 import { ArrowUpDown, Search, X } from "lucide-react";
+import { normalizeSearchText } from "@bwv/data-format";
 import {
   startTransition,
   useDeferredValue,
@@ -51,15 +52,7 @@ interface CatalogBrowserProps<T> {
 const DISPLAY_PAGE_SIZE = 75;
 const SEARCH_URL_DELAY_MS = 250;
 
-export const normalizeSearchText = (value: string): string =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase()
-    .replace(/[’']/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim()
-    .replace(/\s+/g, " ");
+export { normalizeSearchText };
 
 const editDistance = (left: string, right: string): number => {
   const previous = Array.from({ length: right.length + 1 }, (_, index) => index);

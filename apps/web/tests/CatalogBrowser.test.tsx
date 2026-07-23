@@ -21,6 +21,9 @@ vi.mock("../src/hooks/usePeriodSearch", () => ({
 describe("CatalogBrowser", () => {
   it("normalizes punctuation and ranks exact matches before fuzzy matches", () => {
     expect(normalizeSearchText("D'Andézon, Vieilles-Vignes!")).toBe("dandezon vieilles vignes");
+    expect(normalizeSearchText("éëèêěẽ Ærø Œuvre Łódź Straße")).toBe(
+      "eeeeee aero oeuvre lodz strasse",
+    );
     const results = rankSearchItems(
       ["Sauvignon Blanc", "Sauvignon", "Cabernet"],
       "sauvignon",

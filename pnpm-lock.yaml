@@ -50,6 +50,9 @@ importers:
       '@bwv/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@bwv/data-format':
+        specifier: workspace:*
+        version: link:../../packages/data-format
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
