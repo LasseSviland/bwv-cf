@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -31,7 +31,9 @@ describe("EntityMoreInfo", () => {
     expect(getWine).not.toHaveBeenCalled();
 
     await user.click(screen.getByText("More info"));
-    expect(getWine).toHaveBeenCalledWith("session-key", "17", expect.any(AbortSignal));
+    await waitFor(() =>
+      expect(getWine).toHaveBeenCalledWith("session-key", "17", expect.any(AbortSignal)),
+    );
     expect(screen.getByRole("status").textContent).toContain("Loading more information");
 
     resolveDetail?.({
