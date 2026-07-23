@@ -7,7 +7,7 @@ All endpoints are under `/api/v1` and require `Authorization: Bearer <API_KEY>`.
 - `GET /status` — R2 catalog counts and available daily inventory coverage.
 - `GET /health` — Worker and R2 catalog health without contacting Vinmonopolet.
 - `GET /statistics?from=YYYY-MM-DD&to=YYYY-MM-DD` — daily, period-level, and per-wine fixed-assortment stockout statistics.
-- `GET /wines?query=&cursor=&limit=&from=&to=` — active Better Wines catalog with per-wine inventory summaries; a non-empty `query` also searches retained outdated products.
+- `GET /wines?query=&cursor=&limit=&from=&to=&includeOutdated=` — active Better Wines catalog with per-wine inventory summaries; a non-empty `query` or `includeOutdated=true` also includes retained outdated products.
 - `GET /wines/:wineId` — wine summary plus the complete stored product record in `sourceData`.
 - `GET /wines/:wineId/inventory?from=YYYY-MM-DD&to=YYYY-MM-DD` — daily stock for every store that stocked the wine during the period.
 - `GET /monopolies?query=&cursor=&limit=&from=&to=` — Vinmonopolet store search with Better Wines inventory summaries.

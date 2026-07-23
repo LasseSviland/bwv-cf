@@ -1,12 +1,20 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../src/api/client";
+import { createAppQueryClient } from "../src/api/queryClient";
 import { EntityMoreInfo } from "../src/components/EntityMoreInfo";
 
 vi.mock("../src/auth/AuthProvider", () => ({
   useAuth: () => ({ apiKey: "session-key" }),
 }));
+
+const renderWithQuery = (ui: ReactElement) => {
+  const queryClient = createAppQueryClient();
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+};
 
 describe("EntityMoreInfo", () => {
   it("loads and renders complete wine data only after it is opened", async () => {
@@ -19,7 +27,7 @@ describe("EntityMoreInfo", () => {
         }),
     );
 
-    render(<EntityMoreInfo kind="wine" entityId="17" label="Fjordglimt Riesling" />);
+    renderWithQuery(<EntityMoreInfo kind="wine" entityId="17" label="Fjordglimt Riesling" />);
     expect(getWine).not.toHaveBeenCalled();
 
     await user.click(screen.getByText("More info"));
@@ -78,7 +86,7 @@ describe("EntityMoreInfo", () => {
       },
     });
 
-    render(<EntityMoreInfo kind="monopoly" entityId="114" label="Oslo, Aker Brygge" />);
+    renderWithQuery(<EntityMoreInfo kind="monopoly" entityId="114" label="Oslo, Aker Brygge" />);
     await user.click(screen.getByText("More info"));
 
     expect(await screen.findByText("Bryggegata 9")).toBeTruthy();

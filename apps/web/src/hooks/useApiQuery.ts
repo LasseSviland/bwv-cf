@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiQueryKey } from "../api/queryClient";
 import { useAuth } from "../auth/AuthProvider";
 
 export interface ApiQueryState<T> {
@@ -13,41 +14,21 @@ export const useApiQuery = <T>(
   loader: (apiKey: string, signal: AbortSignal) => Promise<T>,
 ): ApiQueryState<T> => {
   const { apiKey } = useAuth();
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0);
-
-  useEffect(() => {
-    if (!apiKey) return;
-    const controller = new AbortController();
-    // A new request identity intentionally resets the visible async state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    setError(null);
-
-    void loader(apiKey, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setData(result);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason : new Error("Unknown API error"));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => controller.abort();
-    // The string key is the deliberate request identity; callers need not memoize loaders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, key, revision]);
+  const request = useQuery({
+    queryKey: apiQueryKey(key),
+    enabled: Boolean(apiKey),
+    queryFn: ({ signal }) => {
+      if (!apiKey) throw new Error("An API key is required.");
+      return loader(apiKey, signal);
+    },
+  });
 
   return {
-    data,
-    error,
-    loading,
-    reload: () => setRevision((value) => value + 1),
+    data: request.data ?? null,
+    error: request.error,
+    loading: Boolean(apiKey) && request.isFetching && request.data === undefined,
+    reload: () => {
+      void request.refetch();
+    },
   };
 };

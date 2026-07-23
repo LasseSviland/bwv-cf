@@ -151,7 +151,14 @@ export const api = {
 
   getWines(
     apiKey: string,
-    values: { query?: string; cursor?: string; limit?: number; from?: string; to?: string } = {},
+    values: {
+      query?: string;
+      cursor?: string;
+      limit?: number;
+      from?: string;
+      to?: string;
+      includeOutdated?: boolean;
+    } = {},
     signal?: AbortSignal,
   ): Promise<CatalogResponse<WineCatalogItem>> {
     return request(
@@ -161,6 +168,7 @@ export const api = {
         limit: values.limit ?? 50,
         from: values.from,
         to: values.to,
+        includeOutdated: values.includeOutdated ? "true" : undefined,
       }),
       apiKey,
       ({ WineCatalogResponseSchema }) => WineCatalogResponseSchema,

@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { ArrowUpDown, Search, X } from "lucide-react";
 import { normalizeSearchText } from "@bwv/data-format";
 import {
@@ -9,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router-dom";
+import { catalogQueryKey } from "../api/queryClient";
 import type { CatalogResponse } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
@@ -32,7 +34,9 @@ interface CatalogBrowserProps<T> {
   itemKey: (item: T) => string | number;
   searchText?: (item: T) => string;
   searchFields?: (item: T) => string[];
-  searchOnServer?: boolean;
+  filterWithoutSearch?: (item: T) => boolean;
+  categoryFilterLabel?: string;
+  categoryValues?: (item: T) => readonly string[];
   pageSize?: number;
   load: (
     apiKey: string,
@@ -51,6 +55,7 @@ interface CatalogBrowserProps<T> {
 
 const DISPLAY_PAGE_SIZE = 75;
 const SEARCH_URL_DELAY_MS = 250;
+const CATEGORY_QUERY_PARAMETER = "category";
 
 export { normalizeSearchText };
 
@@ -109,10 +114,13 @@ const rankSearchIndex = <T,>(
   index: readonly SearchIndexEntry<T>[],
   query: string,
   tieBreaker?: (left: T, right: T) => number,
+  filterWithoutSearch?: (item: T) => boolean,
 ): T[] => {
   const normalizedQuery = normalizeSearchText(query);
   if (!normalizedQuery) {
-    const items = index.map(({ item }) => item);
+    const items = index
+      .map(({ item }) => item)
+      .filter((item) => filterWithoutSearch?.(item) ?? true);
     return tieBreaker ? items.sort(tieBreaker) : items;
   }
   const queryTokens = normalizedQuery.split(" ");
@@ -162,7 +170,9 @@ export const CatalogBrowser = <T,>({
   itemKey,
   searchText = (item) => String(item),
   searchFields = (item) => [searchText(item)],
-  searchOnServer = false,
+  filterWithoutSearch,
+  categoryFilterLabel = "Categories",
+  categoryValues,
   pageSize = DISPLAY_PAGE_SIZE,
   load,
   sortItems,
@@ -176,16 +186,18 @@ export const CatalogBrowser = <T,>({
   const requestPeriod = latestOnly && latestDate ? { from: latestDate, to: latestDate } : period;
   const [searchParams, setSearchParams] = useSearchParams();
   const queryParam = searchParams.get("q") ?? "";
+  const selectedCategories = useMemo(
+    () =>
+      new Set(
+        searchParams.getAll(CATEGORY_QUERY_PARAMETER).filter((value) => /^[1-6]$/.test(value)),
+      ),
+    [searchParams],
+  );
   const [draft, setDraft] = useState(queryParam);
   const query = useDeferredValue(draft);
-  const [items, setItems] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
-  const [error, setError] = useState<Error | null>(null);
-  const [revision, setRevision] = useState(0);
   const [sortValue, setSortValue] = useState(defaultSort ?? sortOptions[0]?.value ?? "");
   const activeSort = sortOptions.find(({ value }) => value === sortValue)?.compare ?? sortItems;
-  const requestQuery = searchOnServer ? queryParam.trim() : "";
 
   useEffect(() => {
     // Keep back/forward navigation authoritative without resetting the draft on each keystroke.
@@ -205,62 +217,84 @@ export const CatalogBrowser = <T,>({
     return () => window.clearTimeout(timeout);
   }, [draft, queryParam, searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!apiKey) return;
-    const controller = new AbortController();
-    // A new request identity intentionally resets the visible async state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
-    setError(null);
-    setItems([]);
-    setVisibleCount(DISPLAY_PAGE_SIZE);
-    void (async () => {
+  const request = useQuery({
+    queryKey: catalogQueryKey(kind, requestPeriod, pageSize),
+    enabled: Boolean(apiKey),
+    queryFn: async ({ signal }) => {
+      if (!apiKey) throw new Error("An API key is required.");
       const allItems: T[] = [];
       let cursor: string | undefined;
       do {
         const result = await load(
           apiKey,
           {
-            query: requestQuery || undefined,
             cursor,
             limit: pageSize,
             from: requestPeriod.from,
             to: requestPeriod.to,
           },
-          controller.signal,
+          signal,
         );
+        signal.throwIfAborted();
         allItems.push(...result.items);
         cursor = result.nextCursor ?? undefined;
-      } while (cursor && !controller.signal.aborted);
+      } while (cursor);
       return allItems;
-    })()
-      .then((allItems) => {
-        if (controller.signal.aborted) return;
-        setItems(allItems);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason : new Error("Unknown API error"));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-    // `load` is a stable API method; server query and revision are the request identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, pageSize, requestPeriod.from, requestPeriod.to, requestQuery, revision]);
+    },
+  });
 
+  useEffect(() => {
+    // Each period starts with a compact result set, including when its data came from cache.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVisibleCount(DISPLAY_PAGE_SIZE);
+  }, [kind, pageSize, requestPeriod.from, requestPeriod.to]);
+
+  const items = useMemo(() => request.data ?? [], [request.data]);
+  const loading = Boolean(apiKey) && request.isFetching && request.data === undefined;
+  const error = request.error;
   const searchIndex = useMemo(() => indexSearchItems(items, searchFields), [items, searchFields]);
-  const sortedItems = useMemo(
-    () => rankSearchIndex(searchIndex, query, activeSort),
-    [activeSort, query, searchIndex],
+  const categoryOptions = useMemo(
+    () =>
+      categoryValues
+        ? [
+            ...new Set(
+              items.flatMap((item) =>
+                categoryValues(item).filter((value) => /^[1-6]$/.test(value)),
+              ),
+            ),
+          ].sort((left, right) => Number(left) - Number(right))
+        : [],
+    [categoryValues, items],
   );
+  const sortedItems = useMemo(() => {
+    const rankedItems = rankSearchIndex(searchIndex, query, activeSort, filterWithoutSearch);
+    if (!categoryValues || selectedCategories.size === 0) return rankedItems;
+    return rankedItems.filter((item) =>
+      categoryValues(item).some((category) => selectedCategories.has(category)),
+    );
+  }, [activeSort, categoryValues, filterWithoutSearch, query, searchIndex, selectedCategories]);
   const visibleItems = sortedItems.slice(0, visibleCount);
 
   const updateSearch = (value: string) => {
     setDraft(value);
     setVisibleCount(DISPLAY_PAGE_SIZE);
+  };
+
+  const updateCategories = (nextCategories: ReadonlySet<string>) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete(CATEGORY_QUERY_PARAMETER);
+    [...nextCategories]
+      .sort((left, right) => Number(left) - Number(right))
+      .forEach((category) => params.append(CATEGORY_QUERY_PARAMETER, category));
+    setVisibleCount(DISPLAY_PAGE_SIZE);
+    startTransition(() => setSearchParams(params, { replace: true }));
+  };
+
+  const toggleCategory = (category: string) => {
+    const nextCategories = new Set(selectedCategories);
+    if (nextCategories.has(category)) nextCategories.delete(category);
+    else nextCategories.add(category);
+    updateCategories(nextCategories);
   };
 
   return (
@@ -330,8 +364,11 @@ export const CatalogBrowser = <T,>({
                     className="h-12 w-full appearance-none rounded-lg border border-border/80 bg-background pr-9 pl-11 text-sm text-foreground shadow-none outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     value={sortValue}
                     onChange={(event) => {
-                      setSortValue(event.target.value);
-                      setVisibleCount(DISPLAY_PAGE_SIZE);
+                      const value = event.target.value;
+                      startTransition(() => {
+                        setSortValue(value);
+                        setVisibleCount(DISPLAY_PAGE_SIZE);
+                      });
                     }}
                   >
                     {sortOptions.map((option) => (
@@ -350,6 +387,47 @@ export const CatalogBrowser = <T,>({
               ) : null}
             </div>
           </div>
+          {categoryValues && categoryOptions.length > 0 ? (
+            <div className="border-t border-border/70 pt-4">
+              <p className="mb-2.5 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+                {categoryFilterLabel}
+              </p>
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label={`${categoryFilterLabel} filter`}
+              >
+                {categoryOptions.map((category) => {
+                  const selected = selectedCategories.has(category);
+                  return (
+                    <Button
+                      key={category}
+                      type="button"
+                      size="sm"
+                      variant={selected ? "default" : "outline"}
+                      className="min-w-9 tabular-nums"
+                      aria-label={`Category ${category}`}
+                      aria-pressed={selected}
+                      onClick={() => toggleCategory(category)}
+                    >
+                      {category}
+                    </Button>
+                  );
+                })}
+                {selectedCategories.size > 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => updateCategories(new Set())}
+                  >
+                    <X />
+                    Clear categories
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -382,10 +460,22 @@ export const CatalogBrowser = <T,>({
 
       {loading ? <LoadingState label={`Loading ${kind}…`} /> : null}
       {!loading && error && items.length === 0 ? (
-        <ErrorState error={error} onRetry={() => setRevision((value) => value + 1)} />
+        <ErrorState
+          error={error}
+          onRetry={() => {
+            void request.refetch();
+          }}
+        />
       ) : null}
       {!loading && !error && sortedItems.length === 0 ? (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
+        <EmptyState
+          title={emptyTitle}
+          description={
+            selectedCategories.size > 0
+              ? "Try selecting other categories or clearing the category filter."
+              : emptyDescription
+          }
+        />
       ) : null}
       {sortedItems.length > 0 ? (
         <>

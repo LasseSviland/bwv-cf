@@ -6,18 +6,19 @@ import type { MonopolyCatalogItem } from "../api/types";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
+import { numericCategories } from "../utils/categories";
 
 const preloadMonopolyDetailPage = () => import("./MonopolyDetailPage");
+
+const monopolyCategoryNumbers = (monopoly: MonopolyCatalogItem): string[] =>
+  numericCategories(monopoly.monopolyCategory, monopoly.storeAssortment);
 
 const MonopolyRow = memo(function MonopolyRow({ monopoly }: { monopoly: MonopolyCatalogItem }) {
   const href = `/monopolies/${monopoly.id}`;
   const currentlyFixedInStock = monopoly.availability.currentlyFixedInStock;
   const currentlyAdditionalInStock = monopoly.availability.currentlyAdditionalInStock;
   const currentlySoldOut = monopoly.availability.currentlySoldOut;
-  const detailedCategory = (monopoly.storeAssortment ?? monopoly.monopolyCategory)?.replace(
-    /^SB/i,
-    "",
-  );
+  const detailedCategory = monopolyCategoryNumbers(monopoly).join(", ");
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(9rem,0.75fr)] gap-x-5 gap-y-4 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:gap-5 lg:py-7">
       <div className="min-w-0">
@@ -140,8 +141,8 @@ const monopolySortOptions: Array<{
     value: "category",
     label: "Category",
     compare: (left, right) => {
-      const leftCategory = left.storeAssortment ?? left.monopolyCategory;
-      const rightCategory = right.storeAssortment ?? right.monopolyCategory;
+      const leftCategory = monopolyCategoryNumbers(left)[0];
+      const rightCategory = monopolyCategoryNumbers(right)[0];
       if (!leftCategory && rightCategory) return 1;
       if (leftCategory && !rightCategory) return -1;
       return (
@@ -183,6 +184,8 @@ export const MonopoliesPage = () => (
     itemKey={(monopoly) => monopoly.id}
     searchText={monopolySearchText}
     searchFields={monopolySearchFields}
+    categoryFilterLabel="Store categories"
+    categoryValues={monopolyCategoryNumbers}
     pageSize={1_000}
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
     defaultSort="wines-in-stock"

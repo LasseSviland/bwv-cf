@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   CircleDollarSign,
@@ -17,8 +18,9 @@ import {
   Utensils,
   Wine,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useState, type ReactNode, type SyntheticEvent } from "react";
 import { api } from "../api/client";
+import { apiQueryKey } from "../api/queryClient";
 import type { JsonObject, JsonValue } from "../api/types";
 import { useAuth } from "../auth/AuthProvider";
 import { cn } from "../lib/utils";
@@ -26,8 +28,6 @@ import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
 
 type EntityKind = "wine" | "monopoly";
-type LoadState = "idle" | "loading" | "loaded" | "error";
-
 interface EntityMoreInfoProps {
   kind: EntityKind;
   entityId: string;
@@ -550,41 +550,21 @@ export const EntityMoreInfo = ({
   sourceData: suppliedSourceData,
 }: EntityMoreInfoProps) => {
   const { apiKey } = useAuth();
-  const [state, setState] = useState<LoadState>("idle");
-  const [sourceData, setSourceData] = useState<JsonObject | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const controller = useRef<AbortController | null>(null);
-
-  useEffect(() => () => controller.current?.abort(), []);
-
-  const load = (): void => {
-    if (suppliedSourceData || !apiKey || state === "loading" || state === "loaded") return;
-    controller.current?.abort();
-    const requestController = new AbortController();
-    controller.current = requestController;
-    setState("loading");
-    setError(null);
-    const request =
-      kind === "wine"
-        ? api.getWine(apiKey, entityId, requestController.signal)
-        : api.getMonopoly(apiKey, entityId, requestController.signal);
-    void request
-      .then((detail) => {
-        if (requestController.signal.aborted) return;
-        setSourceData(detail.sourceData);
-        setState("loaded");
-      })
-      .catch((reason: unknown) => {
-        if (requestController.signal.aborted) return;
-        setError(
-          reason instanceof Error ? reason.message : "More information could not be loaded.",
-        );
-        setState("error");
-      });
-  };
+  const [requested, setRequested] = useState(false);
+  const request = useQuery<{ sourceData: JsonObject }>({
+    queryKey: apiQueryKey(`${kind}-detail:${entityId}`),
+    enabled: suppliedSourceData == null && Boolean(apiKey) && requested,
+    queryFn: ({ signal }) => {
+      if (!apiKey) throw new Error("An API key is required.");
+      return kind === "wine"
+        ? api.getWine(apiKey, entityId, signal)
+        : api.getMonopoly(apiKey, entityId, signal);
+    },
+  });
+  const sourceData = suppliedSourceData ?? request.data?.sourceData ?? null;
 
   const toggle = (event: SyntheticEvent<HTMLDetailsElement>): void => {
-    if (event.currentTarget.open) load();
+    if (event.currentTarget.open && suppliedSourceData == null) setRequested(true);
   };
 
   return (
@@ -601,27 +581,34 @@ export const EntityMoreInfo = ({
         />
       </summary>
       <div className="pt-4">
-        {state === "loading" ? (
+        {requested && request.isFetching && !sourceData ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
             Loading more information…
           </div>
         ) : null}
-        {state === "error" && error ? (
+        {requested && request.error && !sourceData ? (
           <Alert variant="destructive">
             <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-              <span>{error}</span>
-              <Button size="sm" variant="outline" type="button" onClick={load}>
+              <span>{request.error.message}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  void request.refetch();
+                }}
+              >
                 Try again
               </Button>
             </AlertDescription>
           </Alert>
         ) : null}
-        {suppliedSourceData || sourceData ? (
+        {sourceData ? (
           kind === "wine" ? (
-            <WineProfile sourceData={suppliedSourceData ?? sourceData!} />
+            <WineProfile sourceData={sourceData} />
           ) : (
-            <StoreProfile sourceData={suppliedSourceData ?? sourceData!} />
+            <StoreProfile sourceData={sourceData} />
           )
         ) : null}
       </div>

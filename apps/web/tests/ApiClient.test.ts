@@ -146,6 +146,14 @@ describe("API contract validation", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/wines?query=Langhe&limit=25");
   });
 
+  it("can load current and retained wines together for client-side search", async () => {
+    const fetchMock = mockFetch({ items: [], nextCursor: null });
+
+    await api.getWines("session-key", { limit: 1_000, includeOutdated: true });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/wines?limit=1000&includeOutdated=true");
+  });
+
   it("rejects malformed successful responses before UI code can consume them", async () => {
     mockFetch({
       items: [{ id: "not-a-number", productNumber: "123456", name: "Invalid wine" }],

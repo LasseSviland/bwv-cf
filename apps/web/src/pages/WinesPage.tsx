@@ -7,6 +7,7 @@ import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
+import { numericCategories } from "../utils/categories";
 import { formatDate } from "../utils/dates";
 
 const preloadWineDetailPage = () => import("./WineDetailPage");
@@ -107,6 +108,11 @@ const sortWines = (left: WineCatalogItem, right: WineCatalogItem): number =>
   right.availability.currentlyInStock - left.availability.currentlyInStock ||
   left.name.localeCompare(right.name, "en");
 
+const isCurrentWine = (wine: WineCatalogItem): boolean => !wine.outdatedAt;
+
+const wineCategoryNumbers = (wine: WineCatalogItem): string[] =>
+  numericCategories(wine.wineCategory, ...(wine.assortmentGrades ?? []));
+
 const renderWine = (wine: WineCatalogItem, period: Period) => (
   <WineRow wine={wine} period={period} />
 );
@@ -123,9 +129,13 @@ export const WinesPage = () => (
     itemKey={(wine) => wine.id}
     searchText={wineSearchText}
     searchFields={wineSearchFields}
-    searchOnServer
+    filterWithoutSearch={isCurrentWine}
+    categoryFilterLabel="Wine categories"
+    categoryValues={wineCategoryNumbers}
     pageSize={1_000}
-    load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
+    load={(apiKey, values, signal) =>
+      api.getWines(apiKey, { ...values, includeOutdated: true }, signal)
+    }
     sortItems={sortWines}
     renderItem={renderWine}
   />

@@ -98,9 +98,11 @@ app.get("/api/v1/statistics", async (context) => {
 
 app.get("/api/v1/wines", async (context) => {
   const query = context.req.query("query");
-  const catalog = query?.trim()
-    ? await getSearchableWineCatalog(context.env)
-    : await getWineCatalog(context.env);
+  const includeOutdated = context.req.query("includeOutdated") === "true";
+  const catalog =
+    query?.trim() || includeOutdated
+      ? await getSearchableWineCatalog(context.env)
+      : await getWineCatalog(context.env);
   const catalogPage = searchWineCatalog(
     catalog,
     query,
