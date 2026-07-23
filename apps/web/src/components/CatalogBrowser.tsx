@@ -160,7 +160,7 @@ export const CatalogBrowser = <T,>({
   kind,
   title,
   description,
-  headerEyebrow = "Portfolio",
+  headerEyebrow,
   latestOnly = false,
   searchLabel,
   hideSearchLabel = false,

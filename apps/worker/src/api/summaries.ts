@@ -29,20 +29,18 @@ export function summarizeAvailability(
       soldOutAtSomePoint: 0,
       inStockAtSomePoint: 0,
       currentlyInStock: 0,
-      bottlesByDate: [],
+      inStockByDate: [],
     };
   }
   const latestDate = knownDates.at(-1);
   const knownDateSet = new Set(knownDates);
   const observations = new Map<number, Set<string>>();
-  const bottleTotals = new Map(knownDates.map((date) => [date, 0]));
   for (const entry of entries) {
     if (validRelatedIds !== undefined && !validRelatedIds.has(entry.relatedId)) continue;
     const dates = observations.get(entry.relatedId) ?? new Set<string>();
     entry.inventory.forEach(({ date, count }) => {
-      if (!knownDateSet.has(date)) return;
+      if (count <= 0 || !knownDateSet.has(date)) return;
       dates.add(date);
-      bottleTotals.set(date, (bottleTotals.get(date) ?? 0) + count);
     });
     observations.set(entry.relatedId, dates);
   }
@@ -65,7 +63,10 @@ export function summarizeAvailability(
             0,
           ),
         }),
-    bottlesByDate: knownDates.map((date) => ({ date, count: bottleTotals.get(date) ?? 0 })),
+    inStockByDate: knownDates.map((date) => ({
+      date,
+      count: [...observations.values()].filter((dates) => dates.has(date)).length,
+    })),
   };
 }
 

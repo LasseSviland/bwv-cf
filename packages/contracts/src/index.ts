@@ -145,7 +145,7 @@ export const AvailabilitySummarySchema = z
     currentlyFixedInStock: z.number().int().safe().nonnegative().optional(),
     currentlyAdditionalInStock: z.number().int().safe().nonnegative().optional(),
     currentlySoldOut: z.number().int().safe().nonnegative().optional(),
-    bottlesByDate: z.array(DailyInventorySchema),
+    inStockByDate: z.array(DailyInventorySchema),
   })
   .strict();
 export type AvailabilitySummary = z.infer<typeof AvailabilitySummarySchema>;

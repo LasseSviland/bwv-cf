@@ -78,15 +78,15 @@ describe("catalog availability summaries", () => {
       inStockAtSomePoint: 2,
       currentlyInStock: 1,
       currentlySoldOut: 2,
-      bottlesByDate: [
-        { date: "2026-07-10", count: 7 },
-        { date: "2026-07-11", count: 4 },
-        { date: "2026-07-12", count: 3 },
+      inStockByDate: [
+        { date: "2026-07-10", count: 2 },
+        { date: "2026-07-11", count: 1 },
+        { date: "2026-07-12", count: 1 },
       ],
     });
   });
 
-  it("ignores observations outside source coverage", () => {
+  it("ignores observations outside source coverage and zero stock", () => {
     expect(
       summarizeAvailability(
         [
@@ -97,14 +97,15 @@ describe("catalog availability summaries", () => {
               { date: "2026-07-12", count: 9 },
             ],
           },
+          { relatedId: 2, inventory: [{ date: "2026-07-11", count: 0 }] },
         ],
         ["2026-07-11"],
       ),
     ).toEqual({
-      soldOutAtSomePoint: 0,
+      soldOutAtSomePoint: 1,
       inStockAtSomePoint: 1,
       currentlyInStock: 1,
-      bottlesByDate: [{ date: "2026-07-11", count: 6 }],
+      inStockByDate: [{ date: "2026-07-11", count: 1 }],
     });
   });
 });

@@ -2,22 +2,27 @@ import { memo, useId } from "react";
 import type { DailyInventory } from "../api/types";
 import { formatDate } from "../utils/dates";
 
-interface BottleHistoryProps {
-  inventory: DailyInventory[];
+interface MonopolyStockHistoryProps {
+  stockByDate: DailyInventory[];
   label: string;
 }
 
 const number = (value: number) => value.toLocaleString("en-GB");
 
-export const BottleHistory = memo(function BottleHistory({ inventory, label }: BottleHistoryProps) {
+const monopolyCount = (count: number) => `${count} ${count === 1 ? "monopoly" : "monopolies"}`;
+
+export const MonopolyStockHistory = memo(function MonopolyStockHistory({
+  stockByDate,
+  label,
+}: MonopolyStockHistoryProps) {
   const gradientId = useId().replace(/:/g, "");
   const descriptionId = `${gradientId}-description`;
-  const current = inventory.at(-1);
-  const first = inventory[0];
-  const series = inventory.slice(-18);
-  const newestFirst = [...inventory].reverse();
-  const inventoryDescription = newestFirst
-    .map(({ date, count }) => `${formatDate(date)}: ${count} bottle${count === 1 ? "" : "s"}`)
+  const current = stockByDate.at(-1);
+  const first = stockByDate[0];
+  const series = stockByDate.slice(-18);
+  const newestFirst = [...stockByDate].reverse();
+  const stockDescription = newestFirst
+    .map(({ date, count }) => `${formatDate(date)}: ${monopolyCount(count)}`)
     .join("; ");
   const counts = series.map(({ count }) => count);
   const minimum = Math.min(...counts, 0);
@@ -37,13 +42,13 @@ export const BottleHistory = memo(function BottleHistory({ inventory, label }: B
     <div className="relative min-w-0">
       <div
         className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:gap-5"
-        aria-label={`Daily bottle count for ${label}`}
-        aria-describedby={inventoryDescription ? descriptionId : undefined}
+        aria-label={`Daily number of monopolies stocking ${label}`}
+        aria-describedby={stockDescription ? descriptionId : undefined}
         role="img"
       >
-        <div className="min-w-[5.5rem]">
+        <div className="min-w-[7rem]">
           <p className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-            Latest stock
+            Monopolies with stock
           </p>
           <p className="mt-1 text-2xl leading-none font-semibold tracking-[-0.04em] text-primary tabular-nums">
             {current ? number(current.count) : "—"}
@@ -103,9 +108,9 @@ export const BottleHistory = memo(function BottleHistory({ inventory, label }: B
           </div>
         </div>
       </div>
-      {inventoryDescription ? (
+      {stockDescription ? (
         <span className="sr-only" id={descriptionId}>
-          {inventoryDescription}
+          {stockDescription}
         </span>
       ) : null}
     </div>

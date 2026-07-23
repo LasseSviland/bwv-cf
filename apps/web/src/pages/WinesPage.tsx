@@ -3,11 +3,10 @@ import { memo } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Period, WineCatalogItem } from "../api/types";
-import { BottleHistory } from "../components/BottleHistory";
 import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
+import { MonopolyStockHistory } from "../components/MonopolyStockHistory";
 import { Button } from "../components/ui/button";
-import { numericCategories } from "../utils/categories";
 import { formatDate } from "../utils/dates";
 
 const preloadWineDetailPage = () => import("./WineDetailPage");
@@ -53,7 +52,7 @@ const WineRow = memo(function WineRow({ wine, period }: { wine: WineCatalogItem;
           ) : null}
         </div>
       </div>
-      <BottleHistory inventory={wine.availability.bottlesByDate} label={wine.name} />
+      <MonopolyStockHistory stockByDate={wine.availability.inStockByDate} label={wine.name} />
       <Button
         asChild
         variant="ghost"
@@ -102,16 +101,11 @@ const wineSearchFields = (wine: WineCatalogItem): string[] => [
 ];
 
 const sortWines = (left: WineCatalogItem, right: WineCatalogItem): number =>
-  (right.availability.bottlesByDate.at(-1)?.count ?? 0) -
-    (left.availability.bottlesByDate.at(-1)?.count ?? 0) ||
   right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
   right.availability.currentlyInStock - left.availability.currentlyInStock ||
   left.name.localeCompare(right.name, "en");
 
 const isCurrentWine = (wine: WineCatalogItem): boolean => !wine.outdatedAt;
-
-const wineCategoryNumbers = (wine: WineCatalogItem): string[] =>
-  numericCategories(wine.wineCategory, ...(wine.assortmentGrades ?? []));
 
 const renderWine = (wine: WineCatalogItem, period: Period) => (
   <WineRow wine={wine} period={period} />
@@ -121,7 +115,6 @@ export const WinesPage = () => (
   <CatalogBrowser<WineCatalogItem>
     kind="wines"
     title="Wines"
-    description="Explore the current Better Wines portfolio. Search also finds retained historical products that have left the Vinmonopolet catalogue."
     searchLabel="Search wines"
     searchPlaceholder="Search by wine name, producer, product number or category"
     emptyTitle="No wines found"
@@ -130,8 +123,6 @@ export const WinesPage = () => (
     searchText={wineSearchText}
     searchFields={wineSearchFields}
     filterWithoutSearch={isCurrentWine}
-    categoryFilterLabel="Wine categories"
-    categoryValues={wineCategoryNumbers}
     pageSize={1_000}
     load={(apiKey, values, signal) =>
       api.getWines(apiKey, { ...values, includeOutdated: true }, signal)
