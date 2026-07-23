@@ -32,7 +32,10 @@ describe("dataset status", () => {
     });
     r2.seed(dailyInventoryKey("2026-07-13"), {});
 
-    const result = await getStatus({ DATA_BUCKET: r2.bucket } as unknown as Env);
+    const result = await getStatus({
+      DATA_BUCKET: r2.bucket,
+      R2_CACHE: r2.cache.namespace,
+    } as unknown as Env);
 
     expect(result.catalog).toEqual({ wines: 1, monopolies: 1 });
   });

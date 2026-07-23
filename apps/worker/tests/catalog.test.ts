@@ -218,7 +218,10 @@ describe("entity details", () => {
       ],
       outdatedProducts: { "999": "2026-07-13" },
     });
-    const env = { DATA_BUCKET: r2.bucket } as unknown as Env;
+    const env = {
+      DATA_BUCKET: r2.bucket,
+      R2_CACHE: r2.cache.namespace,
+    } as unknown as Env;
 
     await expect(getWineCatalog(env)).resolves.toMatchObject([
       { productNumber: "100", outdatedAt: null },

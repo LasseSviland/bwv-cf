@@ -4,7 +4,7 @@ import { dateInOslo } from "@bwv/data-format";
 import { errorMessage, isPermanentQueueError } from "../errors";
 import { logError, logInfo } from "../log";
 import { dailyInventoryKey } from "../storage/keys";
-import { putJsonIfAbsent } from "../storage/r2";
+import { objectExists, putJsonIfAbsent } from "../storage/r2";
 import type { DailyInventoryFile, QueueProcessResult } from "../types";
 import { syncMonopolies, syncWines } from "./catalogs";
 import { fetchAllWineInventory, type FetchFunction } from "./vinmonopolet";
@@ -37,7 +37,7 @@ export async function processQueueMessage(
   const monopolyFile = await syncMonopolies(env, syncedAt, fetchFn);
 
   const inventoryKey = dailyInventoryKey(message.date);
-  if ((await env.DATA_BUCKET.head(inventoryKey)) !== null) {
+  if (await objectExists(env, inventoryKey)) {
     return {
       outcome: "skipped",
       detail: `Merged ${wineFile.wines.length} wines and ${monopolyFile.monopolies.length} monopolies; inventory already exists`,
@@ -52,7 +52,7 @@ export async function processQueueMessage(
     source: "vinmonopolet/my-products/v1/stock-per-store",
     products: inventory,
   };
-  const stored = await putJsonIfAbsent(env.DATA_BUCKET, inventoryKey, inventoryFile);
+  const stored = await putJsonIfAbsent(env, inventoryKey, inventoryFile);
   if (!stored) {
     return {
       outcome: "skipped",

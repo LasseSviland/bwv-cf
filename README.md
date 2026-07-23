@@ -16,6 +16,10 @@ inventory/YYYY-MM-DD.json    One complete stock-per-store response per Oslo day
 
 The deployed Worker has no database dependency. The one-time, local-only historical migration exports the old read-only MySQL source and uploads the resulting files separately; see [`migration/README.md`](migration/README.md).
 
+Every JSON object-body read is cache-aside through Workers KV. The Worker checks `R2_CACHE`
+first, reads R2 only on a KV miss, and then caches only existing objects no larger than 25 MiB.
+Worker-managed R2 writes also update KV so the two mutable catalog keys stay current.
+
 ## Repository layout
 
 ```text
@@ -39,7 +43,7 @@ pnpm check
 pnpm dev
 ```
 
-`API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` are deployment-owned variables in `wrangler.jsonc`, so local Worker development and production deployments use the same checked-in values. Browser development can run separately with `pnpm dev:web`; Vite proxies `/api` to the local Worker.
+`API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` are deployment-owned variables in `wrangler.jsonc`, so local Worker development and production deployments use the same checked-in values. The `DATA_BUCKET` and `R2_CACHE` bindings use `remote: true`, so `pnpm dev` connects to the same R2 bucket and KV namespace as production. Local Worker requests can therefore read and mutate production storage. Browser development can run separately with `pnpm dev:web`; Vite proxies `/api` to the local Worker.
 
 To run only the frontend locally against the production API, use:
 
@@ -53,6 +57,7 @@ This uses the checked-in `remote-api` Vite mode to proxy `/api` to `https://bwv.
 
 - Worker: `better-wines-viner`
 - R2: `better-wines-viner-data`
+- KV: `better-wines-viner-r2-cache`
 - Queue: `better-wines-viner-sync`
 - DLQ: `better-wines-viner-sync-dlq`
 - Cron: `0 6 * * *` (06:00 UTC; 08:00 CEST)

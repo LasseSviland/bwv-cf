@@ -143,12 +143,12 @@ export function countCurrentStockByAssortment(
 }
 
 async function summaryContext(env: Env, period: Period, productIds: readonly string[]) {
-  const completed = await getCompletedDates(env.DATA_BUCKET, period);
+  const completed = await getCompletedDates(env, period);
   if (completed.length === 0) {
     throw new HttpError(503, "dataset_unavailable", "No requested inventory date is available");
   }
   const knownDates = completed.map(({ date }) => date);
-  const observations = await loadInventoryObservations(env.DATA_BUCKET, knownDates, productIds);
+  const observations = await loadInventoryObservations(env, knownDates, productIds);
   return { knownDates, observations };
 }
 

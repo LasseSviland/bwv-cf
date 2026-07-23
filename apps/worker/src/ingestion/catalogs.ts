@@ -220,14 +220,14 @@ export async function syncMonopolies(
 ): Promise<MonopolyCatalogFile> {
   const current = await fetchAllMonopolies(env.VINMONOPOLET_OPEN_API_KEY, fetchFn);
   if (current.length === 0) throw new Error("Vinmonopolet returned no stores");
-  const previous = await getOptionalJson(env.DATA_BUCKET, MONOPOLIES_KEY, parseMonopolyCatalogFile);
+  const previous = await getOptionalJson(env, MONOPOLIES_KEY, parseMonopolyCatalogFile);
   const file: MonopolyCatalogFile = {
     schemaVersion: 1,
     syncedAt,
     source: "vinmonopolet/stores/v0/details",
     monopolies: mergeMonopolies(previous?.monopolies ?? [], current),
   };
-  await putJson(env.DATA_BUCKET, MONOPOLIES_KEY, file);
+  await putJson(env, MONOPOLIES_KEY, file);
   return file;
 }
 
@@ -241,7 +241,7 @@ export async function syncWines(
   if (current.length === 0) {
     throw new Error(`Vinmonopolet returned no wines for ${BETTER_WINES_WHOLESALER}`);
   }
-  const previous = await getOptionalJson(env.DATA_BUCKET, WINES_KEY, parseWineCatalogFile);
+  const previous = await getOptionalJson(env, WINES_KEY, parseWineCatalogFile);
   const wines = betterWinesOnly(mergeWines(previous?.wines ?? [], current));
   const file: WineCatalogFile = {
     schemaVersion: 2,
@@ -256,16 +256,16 @@ export async function syncWines(
       detectedAt,
     ),
   };
-  await putJson(env.DATA_BUCKET, WINES_KEY, file);
+  await putJson(env, WINES_KEY, file);
   return file;
 }
 
 export function getRawWineCatalog(env: Env): Promise<WineCatalogFile> {
-  return getRequiredJson(env.DATA_BUCKET, WINES_KEY, parseWineCatalogFile);
+  return getRequiredJson(env, WINES_KEY, parseWineCatalogFile);
 }
 
 export function getRawMonopolyCatalog(env: Env): Promise<MonopolyCatalogFile> {
-  return getRequiredJson(env.DATA_BUCKET, MONOPOLIES_KEY, parseMonopolyCatalogFile);
+  return getRequiredJson(env, MONOPOLIES_KEY, parseMonopolyCatalogFile);
 }
 
 export async function getWineCatalog(env: Env): Promise<WineSummary[]> {

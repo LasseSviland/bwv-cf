@@ -3,7 +3,7 @@
 ## Initial release
 
 1. Install dependencies, generate bindings, and run `pnpm check`.
-2. Create the R2 bucket, Queue, and DLQ named in `wrangler.jsonc` if they do not already exist.
+2. Create the R2 bucket, KV namespace, Queue, and DLQ named in `wrangler.jsonc` if they do not already exist.
 3. Review the checked-in `API_KEY`, `VINMONOPOLET_OPEN_API_KEY`, and `VINMONOPOLET_RESTRICTED_API_KEY` variables in `wrangler.jsonc`.
 4. Build and deploy to `better-wines-viner.sviland.workers.dev` without the production route. Wrangler publishes all three variables as part of the deployment.
 5. Verify the SPA password gate plus authenticated `/api/v1/health` and `/api/v1/status` responses.
@@ -13,6 +13,19 @@
 9. Add the reversible `bwv.sviland.net/*` Worker route and repeat desktop and mobile smoke tests.
 
 The initial release does not run a destructive R2 reload. Historical data is handled separately by the resumable, two-phase process in [`migration/README.md`](../migration/README.md); it preserves existing daily R2 files by default.
+
+## R2 read cache
+
+`R2_CACHE` is the remote `better-wines-viner-r2-cache` Workers KV namespace in local
+development and production. Object-body reads always try KV before R2. A successful R2 read
+is cached under `r2:<R2 object key>` only when the object is at most 25 MiB. Missing objects
+and larger objects are never written to KV. KV read or write failures fall back to R2 so the
+cache cannot make the dataset unavailable.
+
+All normal catalog and daily-inventory writes go through the Worker and write through to KV.
+If an operator deletes or replaces an R2 object directly, delete the matching KV key as part
+of the same operation. For example, `catalogs/wines.json` uses the KV key
+`r2:catalogs/wines.json`.
 
 ## Daily sync
 
@@ -36,9 +49,14 @@ curl --fail --request POST \
   https://bwv.sviland.net/api/v1/admin/sync-inventories
 ```
 
-To regenerate a day's inventory, delete only `inventory/YYYY-MM-DD.json`, then trigger the sync. Wines and stores are fetched and merged on every invocation regardless of whether the daily inventory object exists.
+To regenerate a day's inventory, delete `inventory/YYYY-MM-DD.json` from R2 and
+`r2:inventory/YYYY-MM-DD.json` from KV, then trigger the sync. Wines and stores are fetched
+and merged on every invocation regardless of whether the daily inventory object exists.
 
-Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and triggering a sync reconstructs that catalog from the current API response. Because removed source records and their first unavailable dates can only be retained by merging with the prior file, deleting a catalog intentionally discards that retained history.
+Deleting `catalogs/wines.json` or `catalogs/monopolies.json` and its matching `r2:` KV key,
+then triggering a sync, reconstructs that catalog from the current API response. Because
+removed source records and their first unavailable dates can only be retained by merging with
+the prior file, deleting a catalog intentionally discards that retained history.
 
 ## Failures and recovery
 

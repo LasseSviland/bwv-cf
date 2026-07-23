@@ -375,7 +375,7 @@ export async function getStatistics(
   const [wineFile, monopolyFile, allCompleted] = await Promise.all([
     getRawWineCatalog(env),
     getRawMonopolyCatalog(env),
-    getCompletedDates(env.DATA_BUCKET),
+    getCompletedDates(env),
   ]);
   const wineSources = activeWineSources(wineFile);
   const wines = wineSources.map((wine) => wineSummaryFromSource(wine));
@@ -402,7 +402,7 @@ export async function getStatistics(
     fixedAssortmentFromByWineId,
   );
   await visitDailyInventoryObservations(
-    env.DATA_BUCKET,
+    env,
     observationDates,
     wines.map(({ productNumber }) => productNumber),
     (date, observations) => accumulator.addDate(date, observations),

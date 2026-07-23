@@ -1,6 +1,7 @@
 import { DateStringSchema } from "@bwv/contracts";
 
 import { HttpError, PermanentQueueError } from "../errors";
+import { logError } from "../log";
 import type {
   CompletedInventoryDate,
   DailyInventoryFile,
@@ -9,6 +10,64 @@ import type {
   WineCatalogFile,
 } from "../types";
 import { INVENTORY_PREFIX, dateFromDailyInventoryKey } from "./keys";
+
+export const KV_MAX_VALUE_BYTES = 25 * 1024 * 1024;
+
+export type R2JsonStorage = Pick<Env, "DATA_BUCKET" | "R2_CACHE">;
+
+const CACHE_KEY_PREFIX = "r2:";
+const MAX_KV_KEY_BYTES = 512;
+
+async function cacheKey(r2Key: string): Promise<string> {
+  const direct = `${CACHE_KEY_PREFIX}${r2Key}`;
+  if (new TextEncoder().encode(direct).byteLength <= MAX_KV_KEY_BYTES) return direct;
+
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(r2Key));
+  const hash = [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+  return `${CACHE_KEY_PREFIX}sha256:${hash}`;
+}
+
+function parseJson(text: string): unknown {
+  return JSON.parse(text) as unknown;
+}
+
+async function readCache(cache: KVNamespace, r2Key: string): Promise<string | null> {
+  const key = await cacheKey(r2Key);
+  try {
+    return await cache.get(key, "text");
+  } catch (error) {
+    logError("R2 cache read failed; falling back to R2", {
+      r2Key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function writeCache(cache: KVNamespace, r2Key: string, value: string): Promise<void> {
+  if (new TextEncoder().encode(value).byteLength > KV_MAX_VALUE_BYTES) return;
+  try {
+    await cache.put(await cacheKey(r2Key), value);
+  } catch (error) {
+    logError("R2 cache write failed; continuing without cache", {
+      r2Key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function deleteCache(cache: KVNamespace, r2Key: string): Promise<void> {
+  try {
+    await cache.delete(await cacheKey(r2Key));
+  } catch (error) {
+    logError("Invalid R2 cache entry could not be deleted", {
+      r2Key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -93,48 +152,86 @@ export function parseDailyInventoryFile(value: unknown): DailyInventoryFile {
 }
 
 export async function putJson(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   key: string,
   value: object | readonly unknown[],
 ): Promise<R2Object> {
-  return bucket.put(key, JSON.stringify(value), {
+  const serialized = JSON.stringify(value);
+  const object = await storage.DATA_BUCKET.put(key, serialized, {
     httpMetadata: {
       contentType: "application/json; charset=utf-8",
       cacheControl: "no-store",
     },
   });
+  await writeCache(storage.R2_CACHE, key, serialized);
+  return object;
 }
 
 export async function putJsonIfAbsent(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   key: string,
   value: object | readonly unknown[],
 ): Promise<boolean> {
-  const object = await bucket.put(key, JSON.stringify(value), {
+  const serialized = JSON.stringify(value);
+  const object = await storage.DATA_BUCKET.put(key, serialized, {
     onlyIf: { etagDoesNotMatch: "*" },
     httpMetadata: {
       contentType: "application/json; charset=utf-8",
       cacheControl: "no-store",
     },
   });
-  return object !== null;
+  if (object === null) return false;
+  await writeCache(storage.R2_CACHE, key, serialized);
+  return true;
 }
 
 export async function getOptionalJson<T>(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   key: string,
   parse: (value: unknown) => T,
 ): Promise<T | null> {
-  const object = await bucket.get(key);
-  return object === null ? null : parse(await object.json<unknown>());
+  const cached = await readCache(storage.R2_CACHE, key);
+  if (cached !== null) {
+    try {
+      return parse(parseJson(cached));
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      logError("Invalid JSON in R2 cache; refreshing from R2", {
+        r2Key: key,
+        error: error.message,
+      });
+      await deleteCache(storage.R2_CACHE, key);
+    }
+  }
+
+  const object = await storage.DATA_BUCKET.get(key);
+  if (object === null) return null;
+
+  if (object.size > KV_MAX_VALUE_BYTES) return parse(await object.json<unknown>());
+
+  const serialized = await object.text();
+  const value = parseJson(serialized);
+  await writeCache(storage.R2_CACHE, key, serialized);
+  return parse(value);
+}
+
+export async function objectExists(storage: R2JsonStorage, key: string): Promise<boolean> {
+  if ((await readCache(storage.R2_CACHE, key)) !== null) return true;
+
+  const object = await storage.DATA_BUCKET.get(key);
+  if (object === null) return false;
+  if (object.size <= KV_MAX_VALUE_BYTES) {
+    await writeCache(storage.R2_CACHE, key, await object.text());
+  }
+  return true;
 }
 
 export async function getRequiredJson<T>(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   key: string,
   parse: (value: unknown) => T,
 ): Promise<T> {
-  const value = await getOptionalJson(bucket, key, parse);
+  const value = await getOptionalJson(storage, key, parse);
   if (value === null) throw new HttpError(503, "dataset_unavailable", "Dataset is unavailable");
   return value;
 }

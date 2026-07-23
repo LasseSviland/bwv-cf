@@ -13,6 +13,7 @@ import {
 import { enqueueManual } from "../ingestion/enqueue";
 import { logError } from "../log";
 import { MONOPOLIES_KEY, WINES_KEY } from "../storage/keys";
+import { objectExists } from "../storage/r2";
 import { verifyBearerAuthorization } from "./auth";
 import {
   parseCatalogLimit,
@@ -75,12 +76,12 @@ app.use("/api/v1/*", async (context, next) => {
 
 app.get("/api/v1/health", async (context) => {
   const [wines, monopolies] = await Promise.all([
-    context.env.DATA_BUCKET.head(WINES_KEY),
-    context.env.DATA_BUCKET.head(MONOPOLIES_KEY),
+    objectExists(context.env, WINES_KEY),
+    objectExists(context.env, MONOPOLIES_KEY),
   ]);
   return context.json({
     status: "ok",
-    catalogsReady: wines !== null && monopolies !== null,
+    catalogsReady: wines && monopolies,
     requestId: context.get("requestId"),
   });
 });

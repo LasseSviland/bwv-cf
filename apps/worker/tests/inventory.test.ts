@@ -151,7 +151,10 @@ describe("detail inventory series", () => {
       source: "vinmonopolet/my-products/v1/stock-per-store",
       products: [{ productId: "200", stock: [{ storeId: "10", storeStock: 2 }] }],
     });
-    const env = { DATA_BUCKET: r2.bucket } as unknown as Env;
+    const env = {
+      DATA_BUCKET: r2.bucket,
+      R2_CACHE: r2.cache.namespace,
+    } as unknown as Env;
     const period = { from: "2026-07-12", to: "2026-07-13" } as const;
 
     const wineResult = await assembleWineInventory(env, 200, period);

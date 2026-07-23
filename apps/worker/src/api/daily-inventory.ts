@@ -8,6 +8,7 @@ import {
   listCompletedInventoryDates,
   parseDailyInventoryFile,
   parseJsonObject,
+  type R2JsonStorage,
 } from "../storage/r2";
 import type { CompletedInventoryDate } from "../types";
 
@@ -33,15 +34,15 @@ export function completedDatesForPeriod(
 }
 
 export async function getCompletedDates(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   period?: Period,
 ): Promise<CompletedInventoryDate[]> {
-  const completed = await listCompletedInventoryDates(bucket);
+  const completed = await listCompletedInventoryDates(storage.DATA_BUCKET);
   return period === undefined ? completed : completedDatesForPeriod(period, completed);
 }
 
 export async function visitDailyInventoryObservations(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   dates: readonly string[],
   productIds: readonly string[],
   visitor: DailyInventoryVisitor,
@@ -52,7 +53,7 @@ export async function visitDailyInventoryObservations(
     const batch = dates.slice(offset, offset + READ_BATCH_SIZE);
     const files = await Promise.all(
       batch.map((date) =>
-        getOptionalJson(bucket, dailyInventoryKey(date), parseDailyInventoryFile),
+        getOptionalJson(storage, dailyInventoryKey(date), parseDailyInventoryFile),
       ),
     );
     for (const [index, file] of files.entries()) {
@@ -90,12 +91,12 @@ export async function visitDailyInventoryObservations(
 }
 
 export async function loadInventoryObservations(
-  bucket: R2Bucket,
+  storage: R2JsonStorage,
   dates: readonly string[],
   productIds: readonly string[],
 ): Promise<InventoryObservation[]> {
   const observations: InventoryObservation[] = [];
-  await visitDailyInventoryObservations(bucket, dates, productIds, (_date, daily) => {
+  await visitDailyInventoryObservations(storage, dates, productIds, (_date, daily) => {
     observations.push(...daily);
   });
   return observations;

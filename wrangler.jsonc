@@ -24,6 +24,14 @@
     {
       "binding": "DATA_BUCKET",
       "bucket_name": "better-wines-viner-data",
+      "remote": true,
+    },
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "R2_CACHE",
+      "id": "c5a3c726caf34732baaf10c66d8af9fd",
+      "remote": true,
     },
   ],
   "queues": {

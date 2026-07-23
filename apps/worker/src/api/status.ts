@@ -13,8 +13,8 @@ import {
 export async function getStatus(env: Env): Promise<StatusResponse> {
   const [completed, wines, monopolies] = await Promise.all([
     listCompletedInventoryDates(env.DATA_BUCKET),
-    getOptionalJson(env.DATA_BUCKET, WINES_KEY, parseWineCatalogFile),
-    getOptionalJson(env.DATA_BUCKET, MONOPOLIES_KEY, parseMonopolyCatalogFile),
+    getOptionalJson(env, WINES_KEY, parseWineCatalogFile),
+    getOptionalJson(env, MONOPOLIES_KEY, parseMonopolyCatalogFile),
   ]);
   const catalog = {
     wines: wines === null ? 0 : activeWineSources(wines).length,

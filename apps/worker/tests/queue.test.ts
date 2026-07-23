@@ -36,6 +36,7 @@ const requestUrl = (input: RequestInfo | URL): URL =>
 function envFor(r2: MemoryR2): Env {
   return {
     DATA_BUCKET: r2.bucket,
+    R2_CACHE: r2.cache.namespace,
     VINMONOPOLET_OPEN_API_KEY: "open-key",
     VINMONOPOLET_RESTRICTED_API_KEY: "restricted-key",
   } as unknown as Env;

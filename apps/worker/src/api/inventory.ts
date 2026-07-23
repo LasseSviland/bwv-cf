@@ -119,7 +119,7 @@ export async function assembleWineInventory(
   const [wines, monopolies, completed] = await Promise.all([
     getSearchableWineCatalog(env),
     getMonopolyCatalog(env),
-    getCompletedDates(env.DATA_BUCKET, period),
+    getCompletedDates(env, period),
   ]);
   const wine = wines.find(({ id }) => id === wineId);
   if (wine === undefined) throw new HttpError(404, "wine_not_found", "Wine was not found");
@@ -129,9 +129,7 @@ export async function assembleWineInventory(
   const series = new Map<number, DailyInventory[]>();
   const inventoryDates = completedWhileWineCurrent(wine, completed);
   const knownDates = inventoryDates.map(({ date }) => date);
-  const observations = await loadInventoryObservations(env.DATA_BUCKET, knownDates, [
-    wine.productNumber,
-  ]);
+  const observations = await loadInventoryObservations(env, knownDates, [wine.productNumber]);
   for (const observation of observations) {
     const monopoly = monopolyByStoreNumber.get(observation.storeId);
     if (monopoly === undefined) continue;
@@ -161,7 +159,7 @@ export async function assembleMonopolyInventory(
   const [wines, monopolies, completed] = await Promise.all([
     getWineCatalog(env),
     getMonopolyCatalog(env),
-    getCompletedDates(env.DATA_BUCKET, period),
+    getCompletedDates(env, period),
   ]);
   const monopoly = monopolies.find(({ id }) => id === monopolyId);
   if (monopoly === undefined) {
@@ -171,7 +169,7 @@ export async function assembleMonopolyInventory(
   const series = new Map<number, DailyInventory[]>();
   const knownDates = completed.map(({ date }) => date);
   const observations = await loadInventoryObservations(
-    env.DATA_BUCKET,
+    env,
     knownDates,
     wines.map(({ productNumber }) => productNumber),
   );

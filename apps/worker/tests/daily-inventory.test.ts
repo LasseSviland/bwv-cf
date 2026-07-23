@@ -23,7 +23,7 @@ describe("daily inventory loading", () => {
       ],
     });
 
-    await expect(loadInventoryObservations(r2.bucket, ["2026-07-13"], ["100"])).resolves.toEqual([
+    await expect(loadInventoryObservations(r2.storage, ["2026-07-13"], ["100"])).resolves.toEqual([
       { date: "2026-07-13", productId: "100", storeId: "10", count: 3 },
     ]);
   });
