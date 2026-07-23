@@ -270,7 +270,7 @@ export const CatalogBrowser = <T,>({
         className={
           latestOnly
             ? ""
-            : "rounded-3xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5"
+            : "rounded-xl border border-border/70 bg-card/95 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5"
         }
       >
         <div className="flex flex-col gap-5">
@@ -308,8 +308,8 @@ export const CatalogBrowser = <T,>({
                 <Input
                   className={
                     latestOnly
-                      ? "h-12 rounded-2xl border-foreground/20 bg-card pr-4 pl-11 shadow-[0_10px_30px_rgb(31_45_37/6%)]"
-                      : "h-12 rounded-2xl border-border/80 bg-background/70 pr-4 pl-11 shadow-none"
+                      ? "h-12 rounded-lg border-foreground/20 bg-card pr-4 pl-11 shadow-[0_10px_30px_rgb(31_45_37/6%)]"
+                      : "h-12 rounded-lg border-border/80 bg-background pr-4 pl-11 shadow-none"
                   }
                   id={`${kind}-search`}
                   type="search"
@@ -327,7 +327,7 @@ export const CatalogBrowser = <T,>({
                   />
                   <select
                     aria-label={`Sort ${kind}`}
-                    className="h-12 w-full appearance-none rounded-2xl border border-border/80 bg-background/70 pr-9 pl-11 text-sm text-foreground shadow-none outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="h-12 w-full appearance-none rounded-lg border border-border/80 bg-background pr-9 pl-11 text-sm text-foreground shadow-none outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     value={sortValue}
                     onChange={(event) => {
                       setSortValue(event.target.value);
@@ -389,7 +389,7 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {sortedItems.length > 0 ? (
         <>
-          <div className="overflow-hidden rounded-3xl border border-border/80 bg-card/90 px-5 shadow-[0_24px_70px_rgb(31_45_37/6%)] sm:px-7">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card/95 px-5 shadow-[0_24px_70px_rgb(31_45_37/6%)] sm:px-7">
             {visibleItems.map((item, index) => (
               <div
                 className={

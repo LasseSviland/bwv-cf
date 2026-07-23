@@ -16,7 +16,7 @@ function Table({
   return (
     <div
       data-slot="table-container"
-      className={cn("relative w-full overflow-x-auto", containerClassName)}
+      className={cn("relative w-full min-w-0 max-w-full overflow-x-auto", containerClassName)}
       onScroll={onContainerScroll}
       ref={containerRef}
     >

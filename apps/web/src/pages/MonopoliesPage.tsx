@@ -84,7 +84,7 @@ const MonopolyRow = memo(function MonopolyRow({ monopoly }: { monopoly: Monopoly
         asChild
         variant="ghost"
         size="icon-lg"
-        className="hidden rounded-full border border-border/70 bg-background/50 lg:inline-flex"
+        className="hidden rounded-md border border-border/70 bg-background lg:inline-flex"
       >
         <Link
           to={href}

@@ -166,7 +166,7 @@ const ProfileCard = ({
   label: string;
   value: ReactNode;
 }) => (
-  <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-[0_8px_24px_rgb(31_45_37/4%)]">
+  <div className="rounded-xl border border-border/80 bg-card p-4 shadow-[0_8px_24px_rgb(31_45_37/4%)]">
     <div className="flex items-center gap-2 text-primary">
       {icon}
       <p className="text-[0.62rem] font-semibold tracking-[0.13em] text-muted-foreground uppercase">
@@ -186,7 +186,7 @@ const Section = ({
   title: string;
   children: ReactNode;
 }) => (
-  <section className="rounded-2xl border border-border/80 bg-card p-5 shadow-[0_8px_24px_rgb(31_45_37/4%)] sm:p-6">
+  <section className="rounded-xl border border-border/80 bg-card p-5 shadow-[0_8px_24px_rgb(31_45_37/4%)] sm:p-6">
     <div className="flex items-center gap-2.5 text-primary">
       {icon}
       <h3 className="font-serif text-xl font-normal tracking-[-0.02em]">{title}</h3>
@@ -199,7 +199,7 @@ const TechnicalSource = ({ sourceData }: { sourceData: JsonObject }) => {
   const [open, setOpen] = useState(false);
   return (
     <details
-      className="group/source rounded-2xl border border-border/80 bg-card shadow-[0_8px_24px_rgb(31_45_37/4%)]"
+      className="group/source rounded-xl border border-border/80 bg-card shadow-[0_8px_24px_rgb(31_45_37/4%)]"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:px-5">

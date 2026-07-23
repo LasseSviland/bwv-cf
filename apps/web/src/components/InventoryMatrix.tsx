@@ -147,7 +147,7 @@ export const InventoryMatrix = ({
           <h2 className="font-serif text-3xl font-normal tracking-[-0.03em]">{title}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+        <div className="rounded-lg border border-border/70 bg-card px-4 py-3">
           <StockLegend
             showInStock={showInStock}
             showSoldOut={showSoldOut}
@@ -160,7 +160,7 @@ export const InventoryMatrix = ({
       </div>
 
       <Card
-        className="hidden gap-0 overflow-visible rounded-3xl border-0 py-0 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/9 md:block"
+        className="hidden gap-0 overflow-visible rounded-xl border-0 py-0 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/9 md:block"
         tabIndex={0}
         aria-label="Scrollable daily inventory table"
       >
@@ -358,12 +358,12 @@ export const InventoryMatrix = ({
           const status = rowStatus(row);
           return (
             <Card
-              className="rounded-2xl border-0 shadow-[0_16px_45px_rgb(31_45_37/6%)] ring-1 ring-foreground/8"
+              className="rounded-xl border-0 shadow-[0_16px_45px_rgb(31_45_37/6%)] ring-1 ring-foreground/8"
               key={row.id}
             >
               <CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-5 pt-5">
                 <div className="min-w-0">
-                  <h3 className="truncate font-serif text-lg font-normal tracking-[-0.02em]">
+                  <h3 className="break-words font-serif text-lg leading-snug font-normal tracking-[-0.02em]">
                     <Link to={row.href}>{row.label}</Link>
                   </h3>
                   {row.secondary ? (

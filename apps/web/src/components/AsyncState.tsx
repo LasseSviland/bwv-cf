@@ -5,7 +5,7 @@ interface ErrorStateProps {
 
 export const LoadingState = ({ label = "Loading inventory…" }: { label?: string }) => (
   <Card
-    className="rounded-2xl bg-card/80 shadow-none"
+    className="rounded-lg bg-card shadow-none"
     role="status"
     aria-live="polite"
     aria-busy="true"

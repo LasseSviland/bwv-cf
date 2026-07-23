@@ -7,20 +7,20 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import { api, UNAUTHORIZED_EVENT } from "../api/client";
+import { api, ApiError, UNAUTHORIZED_EVENT } from "../api/client";
 import type { StatusResponse } from "../api/types";
 
 const SESSION_KEY = "better-wines:api-key";
 const API_KEY_QUERY_PARAMETERS = ["apiKey", "api_key"] as const;
 
-type AuthState = "checking" | "locked" | "unlocking" | "unlocked";
+type AuthState = "checking" | "locked" | "unlocking" | "unlocked" | "unavailable";
 
 interface AuthContextValue {
   apiKey: string | null;
   state: AuthState;
   status: StatusResponse | null;
   unlock: (apiKey: string) => Promise<void>;
-  logout: () => void;
+  retrySavedKey: () => void;
   refreshStatus: () => Promise<void>;
 }
 
@@ -62,7 +62,6 @@ const keyFromUrl = (): string | null => {
       `${url.pathname}${url.search}${url.hash}`,
     );
     if (!candidate) return null;
-    storeKey(candidate);
     return candidate;
   } catch {
     return null;
@@ -73,20 +72,18 @@ const initialKey = (): string | null => keyFromUrl() ?? storedKey();
 
 export const AuthProvider = ({ children }: PropsWithChildren) => {
   const [apiKey, setApiKey] = useState<string | null>(() => initialKey());
-  const [state, setState] = useState<AuthState>(() => (storedKey() ? "checking" : "locked"));
+  const [state, setState] = useState<AuthState>(() => (apiKey ? "checking" : "locked"));
   const [status, setStatus] = useState<StatusResponse | null>(null);
 
-  const logout = useCallback(() => {
-    setApiKey(null);
+  const lock = useCallback(() => {
     setStatus(null);
     setState("locked");
-    storeKey(null);
   }, []);
 
   useEffect(() => {
-    window.addEventListener(UNAUTHORIZED_EVENT, logout);
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, logout);
-  }, [logout]);
+    window.addEventListener(UNAUTHORIZED_EVENT, lock);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, lock);
+  }, [lock]);
 
   useEffect(() => {
     if (!apiKey || state !== "checking") return;
@@ -94,14 +91,17 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     void api
       .getStatus(apiKey, controller.signal, false)
       .then((nextStatus) => {
+        storeKey(apiKey);
         setStatus(nextStatus);
         setState("unlocked");
       })
-      .catch(() => {
-        if (!controller.signal.aborted) logout();
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        setStatus(null);
+        setState(reason instanceof ApiError && reason.status === 401 ? "locked" : "unavailable");
       });
     return () => controller.abort();
-  }, [apiKey, logout, state]);
+  }, [apiKey, state]);
 
   const unlock = useCallback(async (candidate: string) => {
     if (!candidate) throw new Error("Enter the access password.");
@@ -118,6 +118,10 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     }
   }, []);
 
+  const retrySavedKey = useCallback(() => {
+    setState(apiKey ? "checking" : "locked");
+  }, [apiKey]);
+
   const refreshStatus = useCallback(async () => {
     if (!apiKey) return;
     const nextStatus = await api.getStatus(apiKey);
@@ -125,8 +129,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   }, [apiKey]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ apiKey, state, status, unlock, logout, refreshStatus }),
-    [apiKey, logout, refreshStatus, state, status, unlock],
+    () => ({ apiKey, state, status, unlock, retrySavedKey, refreshStatus }),
+    [apiKey, refreshStatus, retrySavedKey, state, status, unlock],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

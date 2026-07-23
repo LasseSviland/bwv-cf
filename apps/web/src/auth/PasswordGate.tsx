@@ -9,7 +9,7 @@ import { Label } from "../components/ui/label";
 import { useAuth } from "./AuthProvider";
 
 export const PasswordGate = ({ children }: PropsWithChildren) => {
-  const { state, unlock } = useAuth();
+  const { state, unlock, retrySavedKey } = useAuth();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -35,16 +35,31 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
 
   if (state === "unlocked") return children;
 
-  if (state === "checking") {
+  if (state === "checking" || state === "unavailable") {
     return (
       <main
         className="fixed inset-0 grid place-items-center overflow-y-auto bg-primary p-6"
-        aria-busy="true"
+        aria-busy={state === "checking"}
       >
-        <Card className="w-full max-w-md py-12 text-center shadow-2xl">
+        <Card className="w-full max-w-md py-10 text-center shadow-2xl">
           <CardContent className="flex flex-col items-center gap-4 text-muted-foreground">
-            <LoaderCircle className="size-7 animate-spin text-primary" aria-hidden="true" />
-            <p>Checking access…</p>
+            {state === "checking" ? (
+              <>
+                <LoaderCircle className="size-7 animate-spin text-primary" aria-hidden="true" />
+                <p>Checking access…</p>
+              </>
+            ) : (
+              <>
+                <KeyRound className="size-7 text-primary" aria-hidden="true" />
+                <div className="space-y-1">
+                  <h1 className="font-serif text-2xl text-foreground">Access check unavailable</h1>
+                  <p>Your saved password is still stored in this browser.</p>
+                </div>
+                <Button type="button" onClick={retrySavedKey}>
+                  Try saved password again
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       </main>
@@ -56,11 +71,11 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
       <div className="relative grid min-h-full place-items-center p-4 sm:p-8">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(255,255,255,0.12),transparent_38%),radial-gradient(circle_at_15%_90%,rgba(255,255,255,0.07),transparent_30%)]" />
         <Card
-          className="relative w-full max-w-md rounded-[2rem] border-white/15 bg-card py-8 shadow-[0_40px_100px_rgb(0_0_0/28%)] sm:py-10"
+          className="relative w-full max-w-md rounded-xl border-white/15 bg-card py-8 shadow-[0_40px_100px_rgb(0_0_0/28%)] sm:py-10"
           aria-labelledby="gate-title"
         >
           <CardHeader className="px-6 sm:px-10">
-            <span className="mb-5 grid size-11 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+            <span className="mb-5 grid size-11 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
               <Wine className="size-5" aria-hidden="true" />
             </span>
             <p className="text-[0.64rem] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
@@ -83,17 +98,18 @@ export const PasswordGate = ({ children }: PropsWithChildren) => {
               <Label htmlFor="access-password">Access password</Label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
-                  className="h-11 flex-1 rounded-xl"
+                  className="h-11 flex-1 rounded-md"
                   id="access-password"
+                  name="password"
                   type="password"
-                  autoComplete="off"
+                  autoComplete="current-password"
                   autoFocus
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   aria-describedby={error ? "password-error" : undefined}
                 />
                 <Button
-                  className="h-11 rounded-xl px-5"
+                  className="h-11 rounded-md px-5"
                   type="submit"
                   disabled={state === "unlocking"}
                 >

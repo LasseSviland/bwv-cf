@@ -329,7 +329,7 @@ export const WineDetailPage = () => {
       />
 
       <section
-        className="rounded-xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
+        className="rounded-lg border border-border/70 bg-card/95 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
         aria-label="Availability filters"
       >
         <div>
@@ -348,7 +348,7 @@ export const WineDetailPage = () => {
           <Input
             id="store-filter"
             type="search"
-            className="h-12 rounded-md border-border bg-background/65 pr-4 pl-11 shadow-none"
+            className="h-12 rounded-md border-border bg-background pr-4 pl-11 shadow-none"
             placeholder="Search stores by name, number or city"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
@@ -358,7 +358,7 @@ export const WineDetailPage = () => {
           {outdatedAt ? (
             <span>Only historical stock records before {formatDate(outdatedAt)} are shown.</span>
           ) : (
-            <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/55 px-3 py-2 font-normal">
+            <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 font-normal">
               <Checkbox
                 checked={soldOutOnly}
                 onCheckedChange={(checked) => setSoldOutOnly(checked === true)}

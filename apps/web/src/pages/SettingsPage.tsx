@@ -38,9 +38,9 @@ export const SettingsPage = () => {
         description="Manage the daily Vinmonopolet data refresh and keep the portfolio current."
       />
 
-      <Card className="rounded-3xl border-0 p-2 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/8 sm:p-4">
+      <Card className="rounded-xl border-0 p-2 shadow-[0_24px_70px_rgb(31_45_37/7%)] ring-1 ring-foreground/8 sm:p-4">
         <CardHeader>
-          <span className="mb-4 grid size-11 place-items-center rounded-2xl bg-secondary text-primary">
+          <span className="mb-4 grid size-11 place-items-center rounded-lg bg-secondary text-primary">
             <Database className="size-5" aria-hidden="true" />
           </span>
           <CardTitle className="font-serif text-2xl font-normal tracking-[-0.025em]">
@@ -53,7 +53,7 @@ export const SettingsPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <Button
-            className="h-11 rounded-xl px-4"
+            className="h-11 rounded-md px-4"
             type="button"
             disabled={running || !apiKey}
             aria-busy={running}

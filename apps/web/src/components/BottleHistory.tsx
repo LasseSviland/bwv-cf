@@ -36,7 +36,7 @@ export const BottleHistory = memo(function BottleHistory({ inventory, label }: B
   return (
     <div className="relative min-w-0">
       <div
-        className="grid min-w-0 grid-cols-[auto_minmax(10rem,1fr)] items-center gap-5"
+        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:gap-5"
         aria-label={`Daily bottle count for ${label}`}
         aria-describedby={inventoryDescription ? descriptionId : undefined}
         role="img"

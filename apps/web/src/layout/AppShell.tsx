@@ -1,6 +1,6 @@
 import { BarChart3, Store, Wine } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { cn } from "../lib/utils";
 
 const navItems = [
@@ -31,16 +31,29 @@ export interface AppShellOutletContext {
 
 export const AppShell = () => {
   const [headerContent, setHeaderContent] = useState<ReactNode>(null);
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen min-w-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-background/88 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 w-full max-w-400 items-center justify-between gap-3 px-3 sm:px-5 lg:px-8">
+        <div className="mx-auto flex min-h-16 w-full max-w-400 min-w-0 items-center justify-between gap-3 px-3 sm:px-5 lg:px-8">
           <div className="flex min-w-0 items-center">
             {headerContent ? <div className="hidden min-w-0 lg:block">{headerContent}</div> : null}
           </div>
           <nav
-            className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border/70 bg-card/85 p-1 shadow-[0_1px_0_rgb(255_255_255/80%),0_8px_24px_rgb(21_61_45/5%)]"
+            className="flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 bg-card p-1 shadow-[0_1px_0_rgb(255_255_255/80%),0_8px_24px_rgb(21_61_45/5%)]"
             aria-label="Main navigation"
           >
             {navItems.map((item) => (
@@ -67,7 +80,7 @@ export const AppShell = () => {
       </header>
 
       <main
-        className="mx-auto w-full max-w-400 px-3 py-7 sm:px-5 sm:py-10 lg:px-8 lg:py-14"
+        className="mx-auto w-full max-w-400 min-w-0 px-3 py-7 sm:px-5 sm:py-10 lg:px-8 lg:py-14"
         id="main-content"
       >
         <Outlet context={{ setHeaderContent }} />

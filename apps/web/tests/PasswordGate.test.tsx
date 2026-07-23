@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../src/auth/AuthProvider";
@@ -132,5 +132,76 @@ describe("PasswordGate", () => {
     expect(await screen.findByText("Private inventory")).toBeTruthy();
     expect(localStorage.getItem("better-wines:api-key")).toBe("legacy-session-key");
     expect(sessionStorage.getItem("better-wines:api-key")).toBeNull();
+  });
+
+  it("keeps an accepted password in persistent storage when access is locked", async () => {
+    localStorage.setItem("better-wines:api-key", "remembered-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(status), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    );
+
+    const view = render(
+      <AuthProvider>
+        <PasswordGate>
+          <p>Private inventory</p>
+        </PasswordGate>
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText("Private inventory")).toBeTruthy();
+    await act(() => Promise.resolve(window.dispatchEvent(new Event("better-wines:unauthorized"))));
+    expect(await screen.findByRole("heading", { name: "Enter password to access" })).toBeTruthy();
+    expect(localStorage.getItem("better-wines:api-key")).toBe("remembered-key");
+
+    view.unmount();
+    render(
+      <AuthProvider>
+        <PasswordGate>
+          <p>Private inventory</p>
+        </PasswordGate>
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByText("Private inventory")).toBeTruthy();
+    expect(localStorage.getItem("better-wines:api-key")).toBe("remembered-key");
+  });
+
+  it("retries a temporary access-check failure with the saved password", async () => {
+    localStorage.setItem("better-wines:api-key", "remembered-key");
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockRejectedValueOnce(new TypeError("Network unavailable"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(status), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <AuthProvider>
+        <PasswordGate>
+          <p>Private inventory</p>
+        </PasswordGate>
+      </AuthProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Access check unavailable" })).toBeTruthy();
+    expect(localStorage.getItem("better-wines:api-key")).toBe("remembered-key");
+    await user.click(screen.getByRole("button", { name: "Try saved password again" }));
+
+    expect(await screen.findByText("Private inventory")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem("better-wines:api-key")).toBe("remembered-key");
   });
 });

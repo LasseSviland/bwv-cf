@@ -212,7 +212,7 @@ export const MonopolyDetailPage = () => {
       <EntityMoreInfo kind="monopoly" entityId={String(monopoly.id)} label={monopoly.name} />
 
       <section
-        className="rounded-xl border border-border/70 bg-card/88 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
+        className="rounded-lg border border-border/70 bg-card/95 p-4 shadow-[0_20px_60px_rgb(31_45_37/5%)] sm:p-6"
         aria-label="Availability filters"
       >
         <div>
@@ -231,14 +231,14 @@ export const MonopolyDetailPage = () => {
           <Input
             id="wine-filter"
             type="search"
-            className="h-12 rounded-md border-border bg-background/65 pr-4 pl-11 shadow-none"
+            className="h-12 rounded-md border-border bg-background pr-4 pl-11 shadow-none"
             placeholder="Search wines by name, product number or country"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background/55 px-3 py-2 font-normal">
+          <Label className="flex items-center gap-2 rounded-md border border-border/70 bg-background px-3 py-2 font-normal">
             <Checkbox
               checked={soldOutOnly}
               onCheckedChange={(checked) => setSoldOutOnly(checked === true)}

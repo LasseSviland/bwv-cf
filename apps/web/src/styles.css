@@ -90,12 +90,12 @@
   }
 
   html {
-    @apply min-w-80 bg-background font-sans;
-    scroll-behavior: smooth;
+    @apply bg-background font-sans;
+    scroll-padding-top: 5rem;
   }
 
   body {
-    @apply min-h-screen min-w-80 overflow-x-hidden bg-background text-foreground antialiased;
+    @apply min-h-screen overflow-x-hidden bg-background text-foreground antialiased;
     background-image:
       radial-gradient(circle at 8% -5%, rgb(255 255 255 / 92%), transparent 34rem),
       radial-gradient(circle at 94% 10%, rgb(218 231 222 / 42%), transparent 28rem);
@@ -113,5 +113,11 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+
+  input,
+  select,
+  textarea {
+    color-scheme: light;
   }
 }
