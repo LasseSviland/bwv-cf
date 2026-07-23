@@ -4,9 +4,25 @@ import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "../lib/utils";
 
 const navItems = [
-  { to: "/", label: "Statistics", icon: BarChart3, end: true },
-  { to: "/wines", label: "Wines", icon: Wine },
-  { to: "/monopolies", label: "Stores", icon: Store },
+  {
+    to: "/",
+    label: "Statistics",
+    icon: BarChart3,
+    end: true,
+    preload: () => import("../pages/HomePage"),
+  },
+  {
+    to: "/wines",
+    label: "Wines",
+    icon: Wine,
+    preload: () => import("../pages/WinesPage"),
+  },
+  {
+    to: "/monopolies",
+    label: "Stores",
+    icon: Store,
+    preload: () => import("../pages/MonopoliesPage"),
+  },
 ] as const;
 
 export interface AppShellOutletContext {
@@ -32,6 +48,8 @@ export const AppShell = () => {
                 key={item.to}
                 to={item.to}
                 end={"end" in item ? item.end : undefined}
+                onFocus={() => void item.preload()}
+                onMouseEnter={() => void item.preload()}
                 className={({ isActive }) =>
                   cn(
                     "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground sm:px-3",

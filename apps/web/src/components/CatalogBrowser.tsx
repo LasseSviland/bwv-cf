@@ -49,6 +49,7 @@ interface CatalogBrowserProps<T> {
 }
 
 const DISPLAY_PAGE_SIZE = 75;
+const SEARCH_URL_DELAY_MS = 250;
 
 export const normalizeSearchText = (value: string): string =>
   value
@@ -90,25 +91,45 @@ const tokenSimilarity = (query: string, candidate: string): number => {
   return length === 0 ? 1 : 1 - editDistance(query, candidate) / length;
 };
 
-export function rankSearchItems<T>(
+interface SearchIndexEntry<T> {
+  item: T;
+  fields: string[];
+  text: string;
+  tokens: string[];
+}
+
+const indexSearchItems = <T,>(
   items: readonly T[],
-  query: string,
   getFields: (item: T) => string[],
+): SearchIndexEntry<T>[] =>
+  items.map((item) => {
+    const fields = getFields(item).map(normalizeSearchText).filter(Boolean);
+    return {
+      item,
+      fields,
+      text: fields.join(" "),
+      tokens: fields.flatMap((field) => field.split(" ")),
+    };
+  });
+
+const rankSearchIndex = <T,>(
+  index: readonly SearchIndexEntry<T>[],
+  query: string,
   tieBreaker?: (left: T, right: T) => number,
-): T[] {
+): T[] => {
   const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) return tieBreaker ? [...items].sort(tieBreaker) : [...items];
+  if (!normalizedQuery) {
+    const items = index.map(({ item }) => item);
+    return tieBreaker ? items.sort(tieBreaker) : items;
+  }
   const queryTokens = normalizedQuery.split(" ");
   const ranked: Array<{ item: T; score: number }> = [];
 
-  for (const item of items) {
-    const fields = getFields(item).map(normalizeSearchText).filter(Boolean);
-    const text = fields.join(" ");
+  for (const { item, fields, text, tokens } of index) {
     const exact = fields.some((field) => field === normalizedQuery);
     const substring = text.includes(normalizedQuery);
-    const fieldTokens = fields.flatMap((field) => field.split(" "));
     const tokenScores = queryTokens.map((token) =>
-      Math.max(...fieldTokens.map((candidate) => tokenSimilarity(token, candidate)), 0),
+      Math.max(...tokens.map((candidate) => tokenSimilarity(token, candidate)), 0),
     );
     const averageSimilarity =
       tokenScores.reduce((total, score) => total + score, 0) / queryTokens.length;
@@ -123,6 +144,15 @@ export function rankSearchItems<T>(
     (left, right) => right.score - left.score || tieBreaker?.(left.item, right.item) || 0,
   );
   return ranked.map(({ item }) => item);
+};
+
+export function rankSearchItems<T>(
+  items: readonly T[],
+  query: string,
+  getFields: (item: T) => string[],
+  tieBreaker?: (left: T, right: T) => number,
+): T[] {
+  return rankSearchIndex(indexSearchItems(items, getFields), query, tieBreaker);
 }
 
 export const CatalogBrowser = <T,>({
@@ -162,7 +192,25 @@ export const CatalogBrowser = <T,>({
   const [revision, setRevision] = useState(0);
   const [sortValue, setSortValue] = useState(defaultSort ?? sortOptions[0]?.value ?? "");
   const activeSort = sortOptions.find(({ value }) => value === sortValue)?.compare ?? sortItems;
-  const requestQuery = searchOnServer ? query.trim() : "";
+  const requestQuery = searchOnServer ? queryParam.trim() : "";
+
+  useEffect(() => {
+    // Keep back/forward navigation authoritative without resetting the draft on each keystroke.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDraft(queryParam);
+  }, [queryParam]);
+
+  useEffect(() => {
+    const nextQuery = draft.trim();
+    if (nextQuery === queryParam) return;
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams(searchParams);
+      if (nextQuery) params.set("q", nextQuery);
+      else params.delete("q");
+      startTransition(() => setSearchParams(params, { replace: true }));
+    }, SEARCH_URL_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [draft, queryParam, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!apiKey) return;
@@ -210,19 +258,16 @@ export const CatalogBrowser = <T,>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey, pageSize, requestPeriod.from, requestPeriod.to, requestQuery, revision]);
 
+  const searchIndex = useMemo(() => indexSearchItems(items, searchFields), [items, searchFields]);
   const sortedItems = useMemo(
-    () => rankSearchItems(items, query, searchFields, activeSort),
-    [activeSort, items, query, searchFields],
+    () => rankSearchIndex(searchIndex, query, activeSort),
+    [activeSort, query, searchIndex],
   );
   const visibleItems = sortedItems.slice(0, visibleCount);
 
   const updateSearch = (value: string) => {
     setDraft(value);
     setVisibleCount(DISPLAY_PAGE_SIZE);
-    const params = new URLSearchParams(searchParams);
-    if (value.trim()) params.set("q", value.trim());
-    else params.delete("q");
-    startTransition(() => setSearchParams(params, { replace: true }));
   };
 
   return (

@@ -1,4 +1,5 @@
 import { ArrowRight, MapPin, SlidersHorizontal } from "lucide-react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { MonopolyCatalogItem } from "../api/types";
@@ -6,7 +7,9 @@ import { CatalogBrowser } from "../components/CatalogBrowser";
 import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
 
-const MonopolyRow = ({ monopoly }: { monopoly: MonopolyCatalogItem }) => {
+const preloadMonopolyDetailPage = () => import("./MonopolyDetailPage");
+
+const MonopolyRow = memo(function MonopolyRow({ monopoly }: { monopoly: MonopolyCatalogItem }) {
   const href = `/monopolies/${monopoly.id}`;
   const currentlyFixedInStock = monopoly.availability.currentlyFixedInStock;
   const currentlyAdditionalInStock = monopoly.availability.currentlyAdditionalInStock;
@@ -19,7 +22,13 @@ const MonopolyRow = ({ monopoly }: { monopoly: MonopolyCatalogItem }) => {
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(9rem,0.75fr)] gap-x-5 gap-y-4 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:gap-5 lg:py-7">
       <div className="min-w-0">
         <h2 className="font-serif text-2xl leading-tight font-normal tracking-[-0.025em]">
-          <Link className="transition-colors hover:text-primary/70" to={href} title={monopoly.name}>
+          <Link
+            className="transition-colors hover:text-primary/70"
+            to={href}
+            title={monopoly.name}
+            onFocus={() => void preloadMonopolyDetailPage()}
+            onMouseEnter={() => void preloadMonopolyDetailPage()}
+          >
             {monopoly.name}
           </Link>
         </h2>
@@ -77,7 +86,12 @@ const MonopolyRow = ({ monopoly }: { monopoly: MonopolyCatalogItem }) => {
         size="icon-lg"
         className="hidden rounded-full border border-border/70 bg-background/50 lg:inline-flex"
       >
-        <Link to={href} aria-label={`Open ${monopoly.name}`}>
+        <Link
+          to={href}
+          aria-label={`Open ${monopoly.name}`}
+          onFocus={() => void preloadMonopolyDetailPage()}
+          onMouseEnter={() => void preloadMonopolyDetailPage()}
+        >
           <ArrowRight />
         </Link>
       </Button>
@@ -89,7 +103,71 @@ const MonopolyRow = ({ monopoly }: { monopoly: MonopolyCatalogItem }) => {
       />
     </div>
   );
-};
+});
+
+const monopolySearchText = (monopoly: MonopolyCatalogItem): string =>
+  [
+    monopoly.name,
+    monopoly.storeNumber,
+    monopoly.postalCode ?? "",
+    monopoly.city ?? "",
+    monopoly.monopolyCategory ?? "",
+    monopoly.monopolyProfile ?? "",
+    monopoly.storeAssortment ?? "",
+  ].join(" ");
+
+const monopolySearchFields = (monopoly: MonopolyCatalogItem): string[] => [
+  monopoly.name,
+  monopoly.storeNumber,
+  monopoly.postalCode ?? "",
+  monopoly.city ?? "",
+  monopoly.monopolyCategory ?? "",
+  monopoly.monopolyProfile ?? "",
+  monopoly.storeAssortment ?? "",
+];
+
+const monopolySortOptions: Array<{
+  value: string;
+  label: string;
+  compare: (left: MonopolyCatalogItem, right: MonopolyCatalogItem) => number;
+}> = [
+  {
+    value: "name",
+    label: "Name",
+    compare: (left, right) => left.name.localeCompare(right.name, "nb-NO"),
+  },
+  {
+    value: "category",
+    label: "Category",
+    compare: (left, right) => {
+      const leftCategory = left.storeAssortment ?? left.monopolyCategory;
+      const rightCategory = right.storeAssortment ?? right.monopolyCategory;
+      if (!leftCategory && rightCategory) return 1;
+      if (leftCategory && !rightCategory) return -1;
+      return (
+        (rightCategory ?? "").localeCompare(leftCategory ?? "", "nb-NO", {
+          numeric: true,
+        }) || left.name.localeCompare(right.name, "nb-NO")
+      );
+    },
+  },
+  {
+    value: "wines-in-stock",
+    label: "Wines in stock",
+    compare: (left, right) =>
+      right.availability.currentlyInStock - left.availability.currentlyInStock ||
+      left.name.localeCompare(right.name, "nb-NO"),
+  },
+  {
+    value: "wines-sold-out",
+    label: "Wines sold out",
+    compare: (left, right) =>
+      (right.availability.currentlySoldOut ?? -1) - (left.availability.currentlySoldOut ?? -1) ||
+      left.name.localeCompare(right.name, "nb-NO"),
+  },
+];
+
+const renderMonopoly = (monopoly: MonopolyCatalogItem) => <MonopolyRow monopoly={monopoly} />;
 
 export const MonopoliesPage = () => (
   <CatalogBrowser<MonopolyCatalogItem>
@@ -103,65 +181,12 @@ export const MonopoliesPage = () => (
     emptyTitle="No monopolies found"
     emptyDescription="Try another store name, number, postcode or city."
     itemKey={(monopoly) => monopoly.id}
-    searchText={(monopoly) =>
-      [
-        monopoly.name,
-        monopoly.storeNumber,
-        monopoly.postalCode ?? "",
-        monopoly.city ?? "",
-        monopoly.monopolyCategory ?? "",
-        monopoly.monopolyProfile ?? "",
-        monopoly.storeAssortment ?? "",
-      ].join(" ")
-    }
-    searchFields={(monopoly) => [
-      monopoly.name,
-      monopoly.storeNumber,
-      monopoly.postalCode ?? "",
-      monopoly.city ?? "",
-      monopoly.monopolyCategory ?? "",
-      monopoly.monopolyProfile ?? "",
-      monopoly.storeAssortment ?? "",
-    ]}
+    searchText={monopolySearchText}
+    searchFields={monopolySearchFields}
+    pageSize={1_000}
     load={(apiKey, values, signal) => api.getMonopolies(apiKey, values, signal)}
     defaultSort="wines-in-stock"
-    sortOptions={[
-      {
-        value: "name",
-        label: "Name",
-        compare: (left, right) => left.name.localeCompare(right.name, "nb-NO"),
-      },
-      {
-        value: "category",
-        label: "Category",
-        compare: (left, right) => {
-          const leftCategory = left.storeAssortment ?? left.monopolyCategory;
-          const rightCategory = right.storeAssortment ?? right.monopolyCategory;
-          if (!leftCategory && rightCategory) return 1;
-          if (leftCategory && !rightCategory) return -1;
-          return (
-            (rightCategory ?? "").localeCompare(leftCategory ?? "", "nb-NO", {
-              numeric: true,
-            }) || left.name.localeCompare(right.name, "nb-NO")
-          );
-        },
-      },
-      {
-        value: "wines-in-stock",
-        label: "Wines in stock",
-        compare: (left, right) =>
-          right.availability.currentlyInStock - left.availability.currentlyInStock ||
-          left.name.localeCompare(right.name, "nb-NO"),
-      },
-      {
-        value: "wines-sold-out",
-        label: "Wines sold out",
-        compare: (left, right) =>
-          (right.availability.currentlySoldOut ?? -1) -
-            (left.availability.currentlySoldOut ?? -1) ||
-          left.name.localeCompare(right.name, "nb-NO"),
-      },
-    ]}
-    renderItem={(monopoly) => <MonopolyRow key={monopoly.id} monopoly={monopoly} />}
+    sortOptions={monopolySortOptions}
+    renderItem={renderMonopoly}
   />
 );

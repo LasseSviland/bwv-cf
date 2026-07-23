@@ -20,7 +20,7 @@ import {
 import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
 import { useApiQuery } from "../hooks/useApiQuery";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import type { AppShellOutletContext } from "../layout/AppShell";
@@ -46,18 +46,20 @@ const assortmentTermExplanation = (term: string): string => {
 const AssortmentTerm = ({ term }: { term: string }) => {
   const explanation = assortmentTermExplanation(term);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          title={explanation}
-          className="cursor-help border-b border-dotted border-current/45 font-medium text-foreground outline-none hover:border-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        >
-          {term}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-72 text-pretty">{explanation}</TooltipContent>
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            title={explanation}
+            className="cursor-help border-b border-dotted border-current/45 font-medium text-foreground outline-none hover:border-current focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            {term}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-72 text-pretty">{explanation}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 

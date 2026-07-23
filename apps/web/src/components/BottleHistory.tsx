@@ -11,10 +11,14 @@ const number = (value: number) => value.toLocaleString("en-GB");
 
 export const BottleHistory = memo(function BottleHistory({ inventory, label }: BottleHistoryProps) {
   const gradientId = useId().replace(/:/g, "");
+  const descriptionId = `${gradientId}-description`;
   const current = inventory.at(-1);
   const first = inventory[0];
   const series = inventory.slice(-18);
   const newestFirst = [...inventory].reverse();
+  const inventoryDescription = newestFirst
+    .map(({ date, count }) => `${formatDate(date)}: ${count} bottle${count === 1 ? "" : "s"}`)
+    .join("; ");
   const counts = series.map(({ count }) => count);
   const minimum = Math.min(...counts, 0);
   const maximum = Math.max(...counts, 1);
@@ -30,17 +34,13 @@ export const BottleHistory = memo(function BottleHistory({ inventory, label }: B
   const change = current && first ? current.count - first.count : 0;
 
   return (
-    <div className="relative min-w-0" aria-label={`Daily bottle count for ${label}`} role="img">
-      {newestFirst.map(({ date, count }) => (
-        <span
-          className="sr-only"
-          key={date}
-          title={`${formatDate(date)}: ${count} bottle${count === 1 ? "" : "s"}`}
-        >
-          {formatDate(date)}: {count}
-        </span>
-      ))}
-      <div className="grid min-w-0 grid-cols-[auto_minmax(10rem,1fr)] items-center gap-5">
+    <div className="relative min-w-0">
+      <div
+        className="grid min-w-0 grid-cols-[auto_minmax(10rem,1fr)] items-center gap-5"
+        aria-label={`Daily bottle count for ${label}`}
+        aria-describedby={inventoryDescription ? descriptionId : undefined}
+        role="img"
+      >
         <div className="min-w-[5.5rem]">
           <p className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
             Latest stock
@@ -103,6 +103,11 @@ export const BottleHistory = memo(function BottleHistory({ inventory, label }: B
           </div>
         </div>
       </div>
+      {inventoryDescription ? (
+        <span className="sr-only" id={descriptionId}>
+          {inventoryDescription}
+        </span>
+      ) : null}
     </div>
   );
 });

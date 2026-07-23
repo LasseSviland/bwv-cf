@@ -1,16 +1,24 @@
 import type { DailyInventory, Freshness, ISODate, Period } from "../api/types";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const osloDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Oslo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+const monthFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  month: "long",
+  year: "numeric",
+});
+const availableDateSets = new WeakMap<readonly string[], ReadonlySet<string>>();
 
 const toIsoDate = (date: Date): ISODate => date.toISOString().slice(0, 10);
 
 export const todayInOslo = (): ISODate => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Oslo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
+  const parts = osloDateFormatter.formatToParts(new Date());
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((item) => item.type === type)?.value ?? "";
   return `${part("year")}-${part("month")}-${part("day")}`;
@@ -61,21 +69,24 @@ type DateFormatOptions = Omit<Intl.DateTimeFormatOptions, "year"> & { year?: "nu
 export const formatDate = (date: ISODate, options?: DateFormatOptions): string => {
   const { year: requestedYear, ...dateOptions } = options ?? {};
   const year = requestedYear === false ? undefined : (requestedYear ?? "numeric");
-  return new Intl.DateTimeFormat("en-GB", {
+  const formatterOptions: Intl.DateTimeFormatOptions = {
     timeZone: "UTC",
     day: "numeric",
     month: "short",
     ...dateOptions,
     ...(year === undefined ? {} : { year }),
-  }).format(new Date(`${date}T12:00:00Z`));
+  };
+  const key = JSON.stringify(formatterOptions);
+  let formatter = dateFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-GB", formatterOptions);
+    dateFormatters.set(key, formatter);
+  }
+  return formatter.format(new Date(`${date}T12:00:00Z`));
 };
 
 export const formatMonth = (month: string): string =>
-  new Intl.DateTimeFormat("en-GB", {
-    timeZone: "UTC",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(`${month}-01T12:00:00Z`));
+  monthFormatter.format(new Date(`${month}-01T12:00:00Z`));
 
 export interface MonthGroup {
   month: string;
@@ -99,10 +110,19 @@ export const stockDays = (inventory: DailyInventory[]): number =>
 export const isInventoryDateAvailable = (
   date: ISODate,
   freshness: Pick<Freshness, "coveredThrough" | "availableDates" | "missingMonths">,
-): boolean =>
-  date <= freshness.coveredThrough &&
-  !freshness.missingMonths?.includes(date.slice(0, 7)) &&
-  (freshness.availableDates === undefined || freshness.availableDates.includes(date));
+): boolean => {
+  if (date > freshness.coveredThrough || freshness.missingMonths?.includes(date.slice(0, 7))) {
+    return false;
+  }
+  const dates = freshness.availableDates;
+  if (dates === undefined) return true;
+  let dateSet = availableDateSets.get(dates);
+  if (!dateSet) {
+    dateSet = new Set(dates);
+    availableDateSets.set(dates, dateSet);
+  }
+  return dateSet.has(date);
+};
 
 export const availableDates = (
   from: ISODate,

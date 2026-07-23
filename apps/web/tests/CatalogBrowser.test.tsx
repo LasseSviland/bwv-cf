@@ -154,7 +154,14 @@ describe("CatalogBrowser", () => {
     );
 
     expect(await screen.findByText("Current Barbera")).toBeTruthy();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search wines" }), {
+    const searchbox = screen.getByRole("searchbox", { name: "Search wines" });
+    fireEvent.change(searchbox, {
+      target: { value: "O" },
+    });
+    fireEvent.change(searchbox, {
+      target: { value: "Ol" },
+    });
+    fireEvent.change(searchbox, {
       target: { value: "Old" },
     });
 
@@ -162,6 +169,8 @@ describe("CatalogBrowser", () => {
     await waitFor(() =>
       expect(load.mock.calls.some(([, values]) => values.query === "Old")).toBe(true),
     );
+    expect(load.mock.calls.some(([, values]) => values.query === "O")).toBe(false);
+    expect(load.mock.calls.some(([, values]) => values.query === "Ol")).toBe(false);
   });
 
   it("sorts the complete result set with the selected dropdown option", async () => {

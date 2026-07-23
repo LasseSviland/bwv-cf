@@ -1,4 +1,5 @@
 import { ArrowRight, Globe2, Hash, Layers3 } from "lucide-react";
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Period, WineCatalogItem } from "../api/types";
@@ -8,7 +9,9 @@ import { EntityMoreInfo } from "../components/EntityMoreInfo";
 import { Button } from "../components/ui/button";
 import { formatDate } from "../utils/dates";
 
-const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) => {
+const preloadWineDetailPage = () => import("./WineDetailPage");
+
+const WineRow = memo(function WineRow({ wine, period }: { wine: WineCatalogItem; period: Period }) {
   const href = `/wines/${wine.id}?from=${period.from}&to=${period.to}`;
   return (
     <div className="grid gap-5 py-6 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(24rem,1.2fr)_auto] lg:items-center lg:py-7">
@@ -23,7 +26,13 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
             : wine.wineCategory || "Wine"}
         </p>
         <h2 className="font-serif text-2xl leading-tight font-normal tracking-[-0.025em]">
-          <Link className="transition-colors hover:text-primary/70" to={href} title={wine.name}>
+          <Link
+            className="transition-colors hover:text-primary/70"
+            to={href}
+            title={wine.name}
+            onFocus={() => void preloadWineDetailPage()}
+            onMouseEnter={() => void preloadWineDetailPage()}
+          >
             {wine.name}
           </Link>
         </h2>
@@ -50,7 +59,12 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
         size="icon-lg"
         className="hidden rounded-full border border-border/70 bg-background/50 lg:inline-flex"
       >
-        <Link to={href} aria-label={`Open ${wine.name}`}>
+        <Link
+          to={href}
+          aria-label={`Open ${wine.name}`}
+          onFocus={() => void preloadWineDetailPage()}
+          onMouseEnter={() => void preloadWineDetailPage()}
+        >
           <ArrowRight />
         </Link>
       </Button>
@@ -62,7 +76,38 @@ const WineRow = ({ wine, period }: { wine: WineCatalogItem; period: Period }) =>
       />
     </div>
   );
-};
+});
+
+const wineSearchText = (wine: WineCatalogItem): string =>
+  [
+    wine.name,
+    wine.productNumber,
+    wine.country ?? "",
+    wine.wineCategory ?? "",
+    wine.assortment ?? "",
+    ...(wine.assortmentGrades ?? []),
+  ].join(" ");
+
+const wineSearchFields = (wine: WineCatalogItem): string[] => [
+  wine.name,
+  wine.productNumber,
+  wine.country ?? "",
+  wine.wineCategory ?? "",
+  wine.assortment ?? "",
+  ...(wine.assortmentGrades ?? []),
+  wine.outdatedAt ? "outdated" : "",
+];
+
+const sortWines = (left: WineCatalogItem, right: WineCatalogItem): number =>
+  (right.availability.bottlesByDate.at(-1)?.count ?? 0) -
+    (left.availability.bottlesByDate.at(-1)?.count ?? 0) ||
+  right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
+  right.availability.currentlyInStock - left.availability.currentlyInStock ||
+  left.name.localeCompare(right.name, "en");
+
+const renderWine = (wine: WineCatalogItem, period: Period) => (
+  <WineRow wine={wine} period={period} />
+);
 
 export const WinesPage = () => (
   <CatalogBrowser<WineCatalogItem>
@@ -74,35 +119,12 @@ export const WinesPage = () => (
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
     itemKey={(wine) => wine.id}
-    searchText={(wine) =>
-      [
-        wine.name,
-        wine.productNumber,
-        wine.country ?? "",
-        wine.wineCategory ?? "",
-        wine.assortment ?? "",
-        ...(wine.assortmentGrades ?? []),
-      ].join(" ")
-    }
-    searchFields={(wine) => [
-      wine.name,
-      wine.productNumber,
-      wine.country ?? "",
-      wine.wineCategory ?? "",
-      wine.assortment ?? "",
-      ...(wine.assortmentGrades ?? []),
-      wine.outdatedAt ? "outdated" : "",
-    ]}
+    searchText={wineSearchText}
+    searchFields={wineSearchFields}
     searchOnServer
     pageSize={1_000}
     load={(apiKey, values, signal) => api.getWines(apiKey, values, signal)}
-    sortItems={(left, right) =>
-      (right.availability.bottlesByDate.at(-1)?.count ?? 0) -
-        (left.availability.bottlesByDate.at(-1)?.count ?? 0) ||
-      right.availability.inStockAtSomePoint - left.availability.inStockAtSomePoint ||
-      right.availability.currentlyInStock - left.availability.currentlyInStock ||
-      left.name.localeCompare(right.name, "en")
-    }
-    renderItem={(wine, period) => <WineRow key={wine.id} wine={wine} period={period} />}
+    sortItems={sortWines}
+    renderItem={renderWine}
   />
 );

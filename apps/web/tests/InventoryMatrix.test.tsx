@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { InventoryMatrix } from "../src/components/InventoryMatrix";
@@ -185,5 +185,33 @@ describe("InventoryMatrix", () => {
     expect(
       screen.getByText("Historical record · not a current assortment expectation"),
     ).toBeTruthy();
+  });
+
+  it("renders large matrices in bounded batches", () => {
+    const rows = Array.from({ length: 51 }, (_, index) => ({
+      id: String(index + 1),
+      label: `Store ${index + 1}`,
+      href: `/monopolies/${index + 1}`,
+      inventory: [{ date: "2026-07-12" as const, count: index }],
+    }));
+    render(
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <InventoryMatrix
+          rows={rows}
+          from="2026-07-12"
+          to="2026-07-12"
+          entityLabel="Monopoly"
+          emptyTitle="No stores"
+          emptyDescription="No inventory"
+          freshness={{ coveredThrough: "2026-07-12" }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Store 51")).toBeNull();
+    expect(screen.getByText("Showing 50 of 51")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    expect(screen.getAllByText("Store 51")).toHaveLength(2);
+    expect(screen.queryByText("Showing 50 of 51")).toBeNull();
   });
 });

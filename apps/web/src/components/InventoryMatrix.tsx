@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { startTransition, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { DailyInventory, Freshness, ISODate } from "../api/types";
 import type { AssortmentStatus } from "../utils/assortment";
@@ -43,14 +43,15 @@ interface InventoryMatrixProps {
 }
 
 const dayParts = (date: ISODate) => ({
-  weekday: new Intl.DateTimeFormat("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-  })
-    .format(new Date(`${date}T12:00:00Z`))
-    .slice(0, 2),
+  weekday: weekdayFormatter.format(new Date(`${date}T12:00:00Z`)).slice(0, 2),
   day: String(Number(date.slice(-2))),
 });
+
+const weekdayFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "UTC",
+  weekday: "short",
+});
+const INITIAL_VISIBLE_ROWS = 50;
 
 const rowStatus = (row: InventoryRow): AssortmentStatus => row.assortmentStatus ?? "required";
 
@@ -115,8 +116,11 @@ export const InventoryMatrix = ({
   description = "Newest dates appear first. Scroll horizontally to explore the full period.",
 }: InventoryMatrixProps) => {
   const stickyHeaderRef = useRef<HTMLDivElement>(null);
-  const dates = enumerateDates(from, to).reverse();
-  const monthGroups = groupDatesByMonth(dates);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_ROWS);
+  const dates = useMemo(() => enumerateDates(from, to).reverse(), [from, to]);
+  const monthGroups = useMemo(() => groupDatesByMonth(dates), [dates]);
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
+  const latestDate = useMemo(() => latestAvailableDate(from, to, freshness), [freshness, from, to]);
   const showAdditional = rows.some((row) => rowStatus(row) === "additional");
   const showUnknown = rows.some((row) => rowStatus(row) === "unknown");
   const showHistorical = rows.some((row) => rowStatus(row) === "historical");
@@ -271,7 +275,7 @@ export const InventoryMatrix = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {visibleRows.map((row) => {
               const observations = inventoryMap(row.inventory);
               const separatorClass = " border-b border-border";
               return (
@@ -346,8 +350,7 @@ export const InventoryMatrix = ({
       </Card>
 
       <div className="grid gap-3 md:hidden">
-        {rows.map((row) => {
-          const latestDate = latestAvailableDate(from, to, freshness);
+        {visibleRows.map((row) => {
           const latestAvailable = latestDate !== null;
           const count = latestDate ? latestCount(row.inventory, latestDate) : 0;
           const availableDays = stockDays(row.inventory);
@@ -460,6 +463,23 @@ export const InventoryMatrix = ({
           );
         })}
       </div>
+      {visibleCount < rows.length ? (
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() =>
+              startTransition(() => setVisibleCount((current) => current + INITIAL_VISIBLE_ROWS))
+            }
+          >
+            Show more
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Showing {visibleRows.length.toLocaleString("en-GB")} of{" "}
+            {rows.length.toLocaleString("en-GB")}
+          </span>
+        </div>
+      ) : null}
     </section>
   );
 };

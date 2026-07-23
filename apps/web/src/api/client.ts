@@ -1,15 +1,4 @@
-import {
-  AdminAcceptedResponseSchema,
-  ApiErrorResponseSchema,
-  MonopolyDetailSchema,
-  MonopolyCatalogResponseSchema,
-  MonopolyInventoryResponseSchema,
-  StatisticsResponseSchema,
-  StatusResponseSchema,
-  WineCatalogResponseSchema,
-  WineDetailSchema,
-  WineInventoryResponseSchema,
-} from "@bwv/contracts";
+import type * as Contracts from "@bwv/contracts";
 import type {
   AdminAcceptedResponse,
   CatalogResponse,
@@ -51,8 +40,17 @@ interface RuntimeSchema<T> {
   safeParse(value: unknown): { success: true; data: T } | { success: false; error: unknown };
 }
 
-const errorFromBody = (body: unknown, status: number): ApiError => {
-  const parsed = ApiErrorResponseSchema.safeParse(body);
+type ContractsModule = typeof Contracts;
+type SchemaSelector<T> = (contracts: ContractsModule) => RuntimeSchema<T>;
+
+const errorFromBody = (
+  body: unknown,
+  status: number,
+  schema: RuntimeSchema<{
+    error: { message: string; code?: string; requestId?: string };
+  }>,
+): ApiError => {
+  const parsed = schema.safeParse(body);
   if (parsed.success) {
     return new ApiError(
       parsed.data.error.message,
@@ -79,10 +77,13 @@ const responseJson = async (response: Response): Promise<unknown> => {
 const request = async <T>(
   path: string,
   apiKey: string,
-  schema: RuntimeSchema<T>,
+  selectSchema: SchemaSelector<T>,
   options: RequestOptions = {},
 ): Promise<T> => {
-  const response = await fetch(path, {
+  // Runtime contracts are substantial and are not needed to paint the password gate. Start
+  // loading them alongside the API request instead of including every schema in the entry chunk.
+  const contractsPromise = import("@bwv/contracts");
+  const responsePromise = fetch(path, {
     method: options.method ?? "GET",
     signal: options.signal,
     headers: {
@@ -92,16 +93,17 @@ const request = async <T>(
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
   });
-  const body = await responseJson(response);
+  const response = await responsePromise;
+  const [body, contracts] = await Promise.all([responseJson(response), contractsPromise]);
 
   if (!response.ok) {
     if (response.status === 401 && options.announceUnauthorized !== false) {
       window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
-    throw errorFromBody(body, response.status);
+    throw errorFromBody(body, response.status, contracts.ApiErrorResponseSchema);
   }
 
-  const parsed = schema.safeParse(body);
+  const parsed = selectSchema(contracts).safeParse(body);
   if (!parsed.success) {
     throw new ApiError(
       "The server returned data in an unexpected format. Please try again later.",
@@ -132,7 +134,7 @@ export const api = {
     signal?: AbortSignal,
     announceUnauthorized = true,
   ): Promise<StatusResponse> {
-    return request("/api/v1/status", apiKey, StatusResponseSchema, {
+    return request("/api/v1/status", apiKey, ({ StatusResponseSchema }) => StatusResponseSchema, {
       signal,
       announceUnauthorized,
     });
@@ -142,7 +144,7 @@ export const api = {
     return request(
       withQuery("/api/v1/statistics", { from: period.from, to: period.to }),
       apiKey,
-      StatisticsResponseSchema,
+      ({ StatisticsResponseSchema }) => StatisticsResponseSchema,
       { signal },
     );
   },
@@ -161,15 +163,18 @@ export const api = {
         to: values.to,
       }),
       apiKey,
-      WineCatalogResponseSchema,
+      ({ WineCatalogResponseSchema }) => WineCatalogResponseSchema,
       { signal },
     );
   },
 
   getWine(apiKey: string, wineId: string, signal?: AbortSignal): Promise<WineDetail> {
-    return request(`/api/v1/wines/${encodeURIComponent(wineId)}`, apiKey, WineDetailSchema, {
-      signal,
-    });
+    return request(
+      `/api/v1/wines/${encodeURIComponent(wineId)}`,
+      apiKey,
+      ({ WineDetailSchema }) => WineDetailSchema,
+      { signal },
+    );
   },
 
   getWineInventory(
@@ -184,7 +189,7 @@ export const api = {
         to: period.to,
       }),
       apiKey,
-      WineInventoryResponseSchema,
+      ({ WineInventoryResponseSchema }) => WineInventoryResponseSchema,
       { signal },
     );
   },
@@ -203,7 +208,7 @@ export const api = {
         to: values.to,
       }),
       apiKey,
-      MonopolyCatalogResponseSchema,
+      ({ MonopolyCatalogResponseSchema }) => MonopolyCatalogResponseSchema,
       { signal },
     );
   },
@@ -212,7 +217,7 @@ export const api = {
     return request(
       `/api/v1/monopolies/${encodeURIComponent(monopolyId)}`,
       apiKey,
-      MonopolyDetailSchema,
+      ({ MonopolyDetailSchema }) => MonopolyDetailSchema,
       { signal },
     );
   },
@@ -229,15 +234,20 @@ export const api = {
         to: period.to,
       }),
       apiKey,
-      MonopolyInventoryResponseSchema,
+      ({ MonopolyInventoryResponseSchema }) => MonopolyInventoryResponseSchema,
       { signal },
     );
   },
 
   startInventorySync(apiKey: string, signal?: AbortSignal): Promise<AdminAcceptedResponse> {
-    return request("/api/v1/admin/sync-inventories", apiKey, AdminAcceptedResponseSchema, {
-      signal,
-      method: "POST",
-    });
+    return request(
+      "/api/v1/admin/sync-inventories",
+      apiKey,
+      ({ AdminAcceptedResponseSchema }) => AdminAcceptedResponseSchema,
+      {
+        signal,
+        method: "POST",
+      },
+    );
   },
 };
