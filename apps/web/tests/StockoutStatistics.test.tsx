@@ -90,17 +90,23 @@ const statistics: StatisticsResponse = {
 
 describe("StockoutStatistics", () => {
   it("shows fixed-assortment metrics, multiple daily charts, wines, and exact dates", () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <StockoutStatistics statistics={statistics} />
       </MemoryRouter>,
     );
 
+    expect(
+      container.querySelector('[data-slot="page-panel"][data-surface="content"]'),
+    ).toBeTruthy();
+    expect(container.querySelectorAll('[data-chart-library="recharts"]')).toHaveLength(4);
     expect(screen.getByText("fixed placements sold out")).toBeTruthy();
-    expect(screen.getByRole("img", { name: /^Sold-out fixed placements by day/ })).toBeTruthy();
-    expect(screen.getByRole("img", { name: /^Wines affected by day/ })).toBeTruthy();
-    expect(screen.getByRole("img", { name: /^Stores affected by day/ })).toBeTruthy();
-    expect(screen.getByRole("img", { name: /^New stockouts by day/ })).toBeTruthy();
+    expect(
+      screen.getByRole("application", { name: /^Sold-out fixed placements by day/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("application", { name: /^Wines affected by day/ })).toBeTruthy();
+    expect(screen.getByRole("application", { name: /^Stores affected by day/ })).toBeTruthy();
+    expect(screen.getByRole("application", { name: /^New stockouts by day/ })).toBeTruthy();
 
     const wineLink = screen.getByRole("link", { name: /Estate Red/ });
     expect(wineLink.getAttribute("href")).toBe("/wines/100?from=2026-07-11&to=2026-07-12");

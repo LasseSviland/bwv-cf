@@ -194,6 +194,7 @@ describe("CatalogBrowser", () => {
         <CatalogBrowser
           kind="stores"
           title="Stores"
+          latestOnly
           searchLabel="Search stores"
           searchPlaceholder="Search"
           emptyTitle="No stores"
@@ -219,6 +220,12 @@ describe("CatalogBrowser", () => {
     );
 
     await screen.findByText("2 results");
+    expect(
+      container.querySelector('[data-slot="page-panel"][data-surface="controls"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-slot="page-panel"][data-surface="content"]'),
+    ).toBeTruthy();
     const names = () =>
       [...container.querySelectorAll("[data-store-name]")].map((item) => item.textContent);
     expect(names()).toEqual(["Alpha", "Beta"]);

@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { usePeriodSearch } from "../hooks/usePeriodSearch";
 import { EmptyState, ErrorState, LoadingState } from "./AsyncState";
 import { PageHeader } from "./PageHeader";
+import { PagePanel } from "./PagePanel";
 import { PeriodPicker } from "./PeriodPicker";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -305,13 +306,7 @@ export const CatalogBrowser = <T,>({
         title={title}
         description={description}
       />
-      <section
-        className={
-          latestOnly
-            ? ""
-            : "rounded-xl border border-border/70 bg-card/95 p-3 shadow-none backdrop-blur sm:p-5 sm:shadow-[0_20px_60px_rgb(31_45_37/6%)]"
-        }
-      >
+      <PagePanel data-surface="controls" className="p-3 sm:p-5">
         <div className="flex flex-col gap-4 sm:gap-5">
           {!latestOnly ? (
             <div>
@@ -345,11 +340,7 @@ export const CatalogBrowser = <T,>({
                   aria-hidden="true"
                 />
                 <Input
-                  className={
-                    latestOnly
-                      ? "h-12 rounded-lg border-foreground/20 bg-card pr-4 pl-11 shadow-[0_10px_30px_rgb(31_45_37/6%)]"
-                      : "h-12 rounded-lg border-border/80 bg-background pr-4 pl-11 shadow-none"
-                  }
+                  className="h-12 rounded-lg border-border/80 bg-background pr-4 pl-11 shadow-none"
                   id={`${kind}-search`}
                   type="search"
                   value={draft}
@@ -434,7 +425,7 @@ export const CatalogBrowser = <T,>({
             </div>
           ) : null}
         </div>
-      </section>
+      </PagePanel>
 
       {!loading && sortedItems.length > 0 ? (
         <div className="flex items-center justify-between gap-4">
@@ -484,7 +475,7 @@ export const CatalogBrowser = <T,>({
       ) : null}
       {sortedItems.length > 0 ? (
         <>
-          <div className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card/95 px-5 shadow-[0_24px_70px_rgb(31_45_37/6%)] sm:px-7">
+          <PagePanel data-surface="content" className="overflow-hidden px-5 sm:px-7">
             {visibleItems.map((item, index) => (
               <div
                 className={
@@ -497,7 +488,7 @@ export const CatalogBrowser = <T,>({
                 {renderItem(item, requestPeriod)}
               </div>
             ))}
-          </div>
+          </PagePanel>
           {visibleCount < sortedItems.length ? (
             <div className="flex justify-center">
               <Button

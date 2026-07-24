@@ -1,5 +1,4 @@
 import { ArrowUpRight } from "lucide-react";
-import { useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 import type {
   DailyStockoutStatistics,
@@ -8,6 +7,8 @@ import type {
 } from "../api/types";
 import { cn } from "../lib/utils";
 import { formatDate } from "../utils/dates";
+import { PagePanel } from "./PagePanel";
+import { TimeSeriesChart } from "./TimeSeriesChart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 interface StockoutStatisticsProps {
@@ -21,38 +22,6 @@ const number = (value: number, maximumFractionDigits = 0): string =>
 
 const percentage = (value: number): string =>
   value.toLocaleString("en-GB", { style: "percent", maximumFractionDigits: 1 });
-
-const linePath = (points: readonly { x: number; y: number }[]): string =>
-  points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
-
-const areaPath = (points: readonly { x: number; y: number }[], baseline: number): string => {
-  if (points.length === 0) return "";
-  const first = points[0];
-  const last = points.at(-1)!;
-  return `${linePath(points)} L${last.x},${baseline} L${first.x},${baseline} Z`;
-};
-
-const tickIndexes = (length: number): number[] => {
-  if (length <= 1) return length === 0 ? [] : [0];
-  return [...new Set([0, Math.round((length - 1) / 2), length - 1])];
-};
-
-const compactChartQuery = (): MediaQueryList | null =>
-  typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? (window.matchMedia("(max-width: 639px)") ?? null)
-    : null;
-
-const useCompactChart = () => {
-  const [compact, setCompact] = useState(() => compactChartQuery()?.matches ?? false);
-  useEffect(() => {
-    const query = compactChartQuery();
-    if (query === null) return;
-    const update = () => setCompact(query.matches);
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  return compact;
-};
 
 const DailyChart = ({
   daily,
@@ -69,146 +38,32 @@ const DailyChart = ({
   mode: "line" | "bars";
   wide?: boolean;
 }) => {
-  const chartId = `daily-chart-${useId().replaceAll(":", "")}`;
-  const compact = useCompactChart();
-  const width = compact ? 360 : wide ? 920 : 560;
-  const height = compact ? 210 : wide ? 270 : 230;
-  const padding = compact
-    ? { top: 18, right: 12, bottom: 34, left: 38 }
-    : { top: 20, right: 18, bottom: 38, left: 48 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
   const values = daily.map(value);
+  const chartData = daily.map((entry) => ({ date: entry.date, value: value(entry) }));
   const actualMaximum = Math.max(0, ...values);
-  const maximum = Math.max(1, actualMaximum);
-  const points = daily.map((entry, index) => ({
-    x:
-      daily.length === 1
-        ? padding.left + plotWidth / 2
-        : padding.left + (index / (daily.length - 1)) * plotWidth,
-    y: padding.top + plotHeight - (value(entry) / maximum) * plotHeight,
-    entry,
-    value: value(entry),
-  }));
-  const yTicks = [0, Math.round(maximum / 2), maximum].filter(
-    (tick, index, all) => all.indexOf(tick) === index,
-  );
-  const barStep = daily.length === 0 ? plotWidth : plotWidth / daily.length;
-  const barWidth = Math.max(1, Math.min(18, barStep * 0.68));
+  const height = wide ? 270 : 230;
+  const description =
+    daily.length === 0
+      ? "No covered dates."
+      : `${daily.length} covered days. ${label} ranged from ${number(Math.min(...values))} to ${number(actualMaximum)}.`;
 
   return (
-    <svg
-      className="block h-auto w-full overflow-visible"
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-labelledby={`${chartId}-title ${chartId}-description`}
-    >
-      <title id={`${chartId}-title`}>{label} by day</title>
-      <desc id={`${chartId}-description`}>
-        {daily.length === 0
-          ? "No covered dates."
-          : `${daily.length} covered days. ${label} ranged from ${number(Math.min(...values))} to ${number(actualMaximum)}.`}
-      </desc>
-      {mode === "line" ? (
-        <defs>
-          <linearGradient id={`${chartId}-fill`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.2" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
-          </linearGradient>
-        </defs>
-      ) : null}
-      {yTicks.map((tick) => {
-        const y = padding.top + plotHeight - (tick / maximum) * plotHeight;
-        return (
-          <g key={tick}>
-            <line
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={y}
-              y2={y}
-              stroke="var(--border)"
-            />
-            <text
-              x={padding.left - 9}
-              y={y + 4}
-              fill="var(--muted-foreground)"
-              fontSize={compact ? 10 : 11}
-              textAnchor="end"
-            >
-              {number(tick)}
-            </text>
-          </g>
-        );
-      })}
-      {mode === "line" && points.length > 0 ? (
-        <>
-          <path d={areaPath(points, padding.top + plotHeight)} fill={`url(#${chartId}-fill)`} />
-          <path
-            d={linePath(points)}
-            fill="none"
-            stroke={color}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="3"
-          />
-          {daily.length <= 45
-            ? points.map((point) => (
-                <circle
-                  key={point.entry.date}
-                  cx={point.x}
-                  cy={point.y}
-                  r="3"
-                  fill="var(--background)"
-                  stroke={color}
-                  strokeWidth="2"
-                >
-                  <title>{`${formatDate(point.entry.date)}: ${number(point.value)}`}</title>
-                </circle>
-              ))
-            : null}
-        </>
-      ) : null}
-      {mode === "bars"
-        ? points.map((point, index) => {
-            const heightValue = (point.value / maximum) * plotHeight;
-            const x = padding.left + index * barStep + (barStep - barWidth) / 2;
-            return (
-              <rect
-                key={point.entry.date}
-                x={x}
-                y={padding.top + plotHeight - heightValue}
-                width={barWidth}
-                height={Math.max(point.value > 0 ? 2 : 0, heightValue)}
-                rx={Math.min(3, barWidth / 3)}
-                fill={color}
-                opacity="0.86"
-              >
-                <title>{`${formatDate(point.entry.date)}: ${number(point.value)}`}</title>
-              </rect>
-            );
-          })
-        : null}
-      {tickIndexes(daily.length).map((index) => {
-        const point = points[index];
-        return point ? (
-          <text
-            key={point.entry.date}
-            x={point.x}
-            y={height - 10}
-            fill="var(--muted-foreground)"
-            fontSize={compact ? 10 : 11}
-            textAnchor={index === 0 ? "start" : index === daily.length - 1 ? "end" : "middle"}
-          >
-            {formatDate(point.entry.date, { day: "numeric", month: "short", year: false })}
-          </text>
-        ) : null;
-      })}
-    </svg>
+    <TimeSeriesChart
+      ariaLabel={`${label} by day`}
+      className="rounded-lg border border-border/55 bg-background/35 px-1 pt-1"
+      color={color}
+      data={chartData}
+      description={description}
+      height={height}
+      metricLabel={label}
+      mode={mode === "line" ? "area" : "bars"}
+      valueFormatter={number}
+    />
   );
 };
 
 const Metric = ({ value, label }: { value: string; label: string }) => (
-  <div className="min-w-0 bg-background px-4 py-5 sm:px-5 sm:py-6">
+  <div className="min-w-0 bg-card px-4 py-5 sm:px-5 sm:py-6">
     <strong className="block text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
       {value}
     </strong>
@@ -339,7 +194,7 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
   const maximumStoreDays = Math.max(0, ...wines.map(({ storeDaysSoldOut }) => storeDaysSoldOut));
 
   return (
-    <div className="space-y-8 sm:space-y-10">
+    <PagePanel data-surface="content" className="space-y-8 p-4 sm:space-y-10 sm:p-6 lg:p-7">
       <section aria-label="Latest fixed-assortment availability">
         <p className="mb-3 text-sm text-muted-foreground">
           {latest ? formatDate(latest.date) : "No covered date"} · {number(summary.observedDays)}{" "}
@@ -393,14 +248,14 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
           title="Stores affected"
           daily={daily}
           value={({ distinctStoresAffected }) => distinctStoresAffected}
-          color="var(--chart-3)"
+          color="var(--chart-2)"
           mode="bars"
         />
         <ChartSection
           title="New stockouts"
           daily={daily}
           value={({ newlySoldOutPairs }) => newlySoldOutPairs}
-          color="var(--chart-2)"
+          color="var(--chart-3)"
           mode="bars"
         />
       </div>
@@ -434,49 +289,45 @@ export const StockoutStatistics = ({ statistics }: StockoutStatisticsProps) => {
         <h2 id="daily-numbers" className="text-lg font-semibold tracking-[-0.02em]">
           Daily numbers
         </h2>
-        <div className="mt-4 overflow-x-auto border-y border-border">
-          <Table className="min-w-180">
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-3 sm:pl-4">Date</TableHead>
-                <TableHead className="text-right">Sold out</TableHead>
-                <TableHead className="text-right">Availability</TableHead>
-                <TableHead className="text-right">Wines</TableHead>
-                <TableHead className="text-right">Stores</TableHead>
-                <TableHead className="pr-3 text-right sm:pr-4">New stockouts</TableHead>
+        <Table className="min-w-180" containerClassName="mt-4 border-y border-border">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-3 sm:pl-4">Date</TableHead>
+              <TableHead className="text-right">Sold out</TableHead>
+              <TableHead className="text-right">Availability</TableHead>
+              <TableHead className="text-right">Wines</TableHead>
+              <TableHead className="text-right">Stores</TableHead>
+              <TableHead className="pr-3 text-right sm:pr-4">New stockouts</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[...daily].reverse().map((entry, index) => (
+              <TableRow key={entry.date} className={cn(index === 0 && "bg-secondary/45")}>
+                <TableCell className="pl-3 font-medium whitespace-nowrap sm:pl-4">
+                  {formatDate(entry.date)}
+                </TableCell>
+                <TableCell className="text-right font-semibold">
+                  {number(entry.soldOutPairs)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {percentage(
+                    entry.trackedPairs === 0 ? 0 : entry.inStockPairs / entry.trackedPairs,
+                  )}
+                </TableCell>
+                <TableCell className="text-right">{number(entry.distinctWinesSoldOut)}</TableCell>
+                <TableCell className="text-right">{number(entry.distinctStoresAffected)}</TableCell>
+                <TableCell className="pr-3 text-right sm:pr-4">
+                  {number(entry.newlySoldOutPairs)}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...daily].reverse().map((entry, index) => (
-                <TableRow key={entry.date} className={cn(index === 0 && "bg-secondary/45")}>
-                  <TableCell className="pl-3 font-medium whitespace-nowrap sm:pl-4">
-                    {formatDate(entry.date)}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {number(entry.soldOutPairs)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {percentage(
-                      entry.trackedPairs === 0 ? 0 : entry.inStockPairs / entry.trackedPairs,
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">{number(entry.distinctWinesSoldOut)}</TableCell>
-                  <TableCell className="text-right">
-                    {number(entry.distinctStoresAffected)}
-                  </TableCell>
-                  <TableCell className="pr-3 text-right sm:pr-4">
-                    {number(entry.newlySoldOutPairs)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       </section>
 
       <p className="border-t border-border pt-4 text-xs text-muted-foreground">
         Fixed-assortment placements only. Optional local stock is excluded from sold-out counts.
       </p>
-    </div>
+    </PagePanel>
   );
 };

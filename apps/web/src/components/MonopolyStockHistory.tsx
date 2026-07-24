@@ -1,6 +1,7 @@
-import { memo, useId } from "react";
+import { memo } from "react";
 import type { DailyInventory } from "../api/types";
 import { formatDate } from "../utils/dates";
+import { TimeSeriesChart } from "./TimeSeriesChart";
 
 interface MonopolyStockHistoryProps {
   stockByDate: DailyInventory[];
@@ -15,37 +16,18 @@ export const MonopolyStockHistory = memo(function MonopolyStockHistory({
   stockByDate,
   label,
 }: MonopolyStockHistoryProps) {
-  const gradientId = useId().replace(/:/g, "");
-  const descriptionId = `${gradientId}-description`;
   const current = stockByDate.at(-1);
   const first = stockByDate[0];
-  const series = stockByDate.slice(-18);
   const newestFirst = [...stockByDate].reverse();
   const stockDescription = newestFirst
     .map(({ date, count }) => `${formatDate(date)}: ${monopolyCount(count)}`)
     .join("; ");
-  const counts = series.map(({ count }) => count);
-  const minimum = Math.min(...counts, 0);
-  const maximum = Math.max(...counts, 1);
-  const range = Math.max(maximum - minimum, 1);
-  const points = series.map(({ count }, index) => ({
-    x: series.length === 1 ? 320 : (index / Math.max(series.length - 1, 1)) * 320,
-    y: 62 - ((count - minimum) / range) * 50,
-  }));
-  const line = points.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const area = points.length
-    ? `M ${points.map(({ x, y }) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ")} L 320 70 L 0 70 Z`
-    : "";
   const change = current && first ? current.count - first.count : 0;
+  const chartData = stockByDate.map(({ date, count }) => ({ date, value: count }));
 
   return (
     <div className="relative min-w-0">
-      <div
-        className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:gap-5"
-        aria-label={`Daily number of monopolies stocking ${label}`}
-        aria-describedby={stockDescription ? descriptionId : undefined}
-        role="img"
-      >
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 sm:gap-5">
         <div className="min-w-[7rem]">
           <p className="text-[0.62rem] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
             Monopolies with stock
@@ -64,55 +46,25 @@ export const MonopolyStockHistory = memo(function MonopolyStockHistory({
           </p>
         </div>
         <div className="min-w-0">
-          <svg
-            className="h-16 w-full overflow-visible"
-            viewBox="0 0 320 70"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#2c7452" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#2c7452" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path d={area} fill={`url(#${gradientId})`} />
-            <polyline
-              points={line}
-              fill="none"
-              stroke="#2c7452"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              vectorEffect="non-scaling-stroke"
-            />
-            {points.length ? (
-              <circle
-                cx={points.at(-1)?.x}
-                cy={points.at(-1)?.y}
-                r="3.5"
-                fill="#fffefa"
-                stroke="#2c7452"
-                strokeWidth="2.5"
-                vectorEffect="non-scaling-stroke"
-              />
-            ) : null}
-          </svg>
+          <TimeSeriesChart
+            ariaLabel={`Daily number of monopolies stocking ${label}`}
+            color="var(--chart-2)"
+            data={chartData}
+            description={stockDescription || "No covered dates."}
+            height={70}
+            metricLabel="Monopolies with stock"
+            mode="area"
+            showAxes={false}
+            valueFormatter={monopolyCount}
+          />
           <div className="mt-0.5 flex items-center justify-between text-[0.6rem] text-muted-foreground/80">
-            <span>
-              {series[0] ? formatDate(series[0].date, { day: "numeric", month: "short" }) : ""}
-            </span>
+            <span>{first ? formatDate(first.date, { day: "numeric", month: "short" }) : ""}</span>
             <span>
               {current ? formatDate(current.date, { day: "numeric", month: "short" }) : ""}
             </span>
           </div>
         </div>
       </div>
-      {stockDescription ? (
-        <span className="sr-only" id={descriptionId}>
-          {stockDescription}
-        </span>
-      ) : null}
     </div>
   );
 });

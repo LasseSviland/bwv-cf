@@ -176,9 +176,8 @@ export const MonopoliesPage = () => (
     title="Stores"
     headerEyebrow={null}
     latestOnly
-    searchLabel="Search monopolies"
-    hideSearchLabel
-    searchPlaceholder="Search by store name, number, postcode, city or category"
+    searchLabel="Search stores"
+    searchPlaceholder="Search stores"
     emptyTitle="No monopolies found"
     emptyDescription="Try another store name, number, postcode or city."
     itemKey={(monopoly) => monopoly.id}
