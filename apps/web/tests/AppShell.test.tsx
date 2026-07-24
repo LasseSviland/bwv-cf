@@ -22,11 +22,16 @@ describe("AppShell", () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByRole("heading", { level: 1, name: "Statistics" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Statistics" }).getAttribute("aria-label")).toBe(
+      "Statistics",
+    );
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
     expect(window.history.scrollRestoration).toBe("manual");
 
     fireEvent.click(screen.getByRole("link", { name: "Wines" }));
     expect(await screen.findByRole("heading", { name: "Wines page" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Wines" })).toBeTruthy();
     expect(scrollTo).toHaveBeenCalledTimes(2);
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
   });

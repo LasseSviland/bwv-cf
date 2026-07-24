@@ -298,19 +298,24 @@ export const CatalogBrowser = <T,>({
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-7 sm:gap-9">
-      <PageHeader eyebrow={headerEyebrow ?? undefined} title={title} description={description} />
+    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-5 sm:gap-9">
+      <PageHeader
+        className="hidden sm:flex"
+        eyebrow={headerEyebrow ?? undefined}
+        title={title}
+        description={description}
+      />
       <section
         className={
           latestOnly
             ? ""
-            : "rounded-xl border border-border/70 bg-card/95 p-4 shadow-[0_20px_60px_rgb(31_45_37/6%)] backdrop-blur sm:p-5"
+            : "rounded-xl border border-border/70 bg-card/95 p-3 shadow-none backdrop-blur sm:p-5 sm:shadow-[0_20px_60px_rgb(31_45_37/6%)]"
         }
       >
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 sm:gap-5">
           {!latestOnly ? (
             <div>
-              <p className="mb-2.5 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase">
+              <p className="mb-2 text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase sm:mb-2.5">
                 Inventory period
               </p>
               <PeriodPicker
@@ -320,12 +325,12 @@ export const CatalogBrowser = <T,>({
               />
             </div>
           ) : null}
-          <div className={latestOnly ? "" : "border-t border-border/70 pt-4"} role="search">
+          <div className={latestOnly ? "" : "border-t border-border/70 pt-3 sm:pt-4"} role="search">
             <label
               className={
                 hideSearchLabel
                   ? "sr-only"
-                  : "mb-2.5 block text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase"
+                  : "sr-only text-[0.64rem] font-semibold tracking-[0.15em] text-muted-foreground uppercase sm:not-sr-only sm:mb-2.5 sm:block"
               }
               htmlFor={`${kind}-search`}
             >

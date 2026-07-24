@@ -1,5 +1,5 @@
-import { ArrowRight } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ArrowRight, CalendarDays, ChevronDown } from "lucide-react";
+import { useId, useState, type FormEvent } from "react";
 import type { Period } from "../api/types";
 import {
   defaultPeriod,
@@ -25,13 +25,14 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
   const [draftOverride, setDraftOverride] = useState<Period | null>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const customFormId = useId();
   const today = todayInOslo();
   const draft = draftOverride ?? period;
 
   const presets = [
-    { label: "Last 30 days", value: defaultPeriod(today) },
-    { label: "Last 2 months", value: lastTwoMonthsPeriod(today) },
-    { label: "This year", value: yearToDatePeriod(today) },
+    { id: "last-30-days", label: "Last 30 days", value: defaultPeriod(today) },
+    { id: "last-two-months", label: "Last 2 months", value: lastTwoMonthsPeriod(today) },
+    { id: "this-year", label: "This year", value: yearToDatePeriod(today) },
   ];
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -45,15 +46,55 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
     setDraftOverride(null);
   };
 
-  const presetSelected = presets.some((preset) => samePeriod(period, preset.value));
-  const showCustom = customOpen || !presetSelected;
+  const selectedPreset = presets.find((preset) => samePeriod(period, preset.value));
+  const showCustom = customOpen || !selectedPreset;
+
+  const selectPreset = (value: Period) => {
+    setError(null);
+    setDraftOverride(null);
+    setCustomOpen(false);
+    onChange(value);
+  };
 
   return (
     <div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="space-y-2">
+          <div className="relative sm:hidden">
+            <CalendarDays
+              className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <select
+              className="h-11 w-full appearance-none rounded-md border border-border/80 bg-background pr-10 pl-10 text-sm font-medium text-foreground shadow-none outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              aria-label="Inventory period"
+              aria-controls={customFormId}
+              value={showCustom ? "custom" : selectedPreset?.id}
+              onChange={(event) => {
+                if (event.target.value === "custom") {
+                  setError(null);
+                  setCustomOpen(true);
+                  return;
+                }
+                const preset = presets.find(({ id }) => id === event.target.value);
+                if (preset) selectPreset(preset.value);
+              }}
+            >
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+              <option value="custom">Custom dates…</option>
+            </select>
+            <ChevronDown
+              className="pointer-events-none absolute top-1/2 right-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+          </div>
           <div
-            className="inline-flex max-w-full flex-wrap gap-1 rounded-lg bg-muted/75 p-1"
+            className="hidden max-w-full flex-nowrap gap-1 rounded-lg bg-muted/75 p-1 sm:inline-flex"
+            role="group"
             aria-label="Quick date ranges"
           >
             {presets.map((preset) => (
@@ -63,12 +104,8 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
                 size="sm"
                 className="rounded-md px-3"
                 type="button"
-                onClick={() => {
-                  setError(null);
-                  setDraftOverride(null);
-                  setCustomOpen(false);
-                  onChange(preset.value);
-                }}
+                aria-pressed={samePeriod(period, preset.value)}
+                onClick={() => selectPreset(preset.value)}
               >
                 {preset.label}
               </Button>
@@ -78,6 +115,9 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
               size="sm"
               className="rounded-md px-3"
               type="button"
+              aria-controls={customFormId}
+              aria-expanded={showCustom}
+              aria-pressed={showCustom}
               onClick={() => {
                 setError(null);
                 setCustomOpen(true);
@@ -89,6 +129,7 @@ export const PeriodPicker = ({ period, onChange, availableMonths = [] }: PeriodP
         </div>
         {showCustom ? (
           <form
+            id={customFormId}
             className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background p-3 sm:flex-row sm:items-end"
             onSubmit={submit}
           >

@@ -16,7 +16,7 @@ export const HomePage = () => {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-6 sm:gap-8">
-      <PageHeader title="Statistics" />
+      <PageHeader className="hidden sm:flex" title="Statistics" />
 
       <section className="border-b border-border pb-5">
         <PeriodPicker

@@ -1,14 +1,27 @@
 import type { ReactNode } from "react";
+import { cn } from "../lib/utils";
 
 interface PageHeaderProps {
   eyebrow?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
+  className?: string;
 }
 
-export const PageHeader = ({ eyebrow, title, description, actions }: PageHeaderProps) => (
-  <header className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-end">
+export const PageHeader = ({
+  eyebrow,
+  title,
+  description,
+  actions,
+  className,
+}: PageHeaderProps) => (
+  <header
+    className={cn(
+      "flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-end",
+      className,
+    )}
+  >
     <div className="min-w-0">
       {eyebrow ? (
         <p className="mb-3 text-[0.68rem] font-semibold tracking-[0.18em] text-primary/75 uppercase">

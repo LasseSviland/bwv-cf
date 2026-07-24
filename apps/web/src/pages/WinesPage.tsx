@@ -116,7 +116,7 @@ export const WinesPage = () => (
     kind="wines"
     title="Wines"
     searchLabel="Search wines"
-    searchPlaceholder="Search by wine name, producer, product number or category"
+    searchPlaceholder="Search wines"
     emptyTitle="No wines found"
     emptyDescription="Try another wine name or product number."
     itemKey={(wine) => wine.id}

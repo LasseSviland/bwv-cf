@@ -32,6 +32,10 @@ export interface AppShellOutletContext {
 export const AppShell = () => {
   const [headerContent, setHeaderContent] = useState<ReactNode>(null);
   const { pathname } = useLocation();
+  const activeNavItem = navItems.find((item) =>
+    item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`),
+  );
+  const isTopLevelPage = activeNavItem?.to === pathname;
 
   useEffect(() => {
     const previous = window.history.scrollRestoration;
@@ -49,8 +53,19 @@ export const AppShell = () => {
     <div className="min-h-screen min-w-0 overflow-x-clip">
       <header className="sticky top-0 z-50 border-b border-border/70 bg-background/88 backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 w-full max-w-400 min-w-0 items-center justify-between gap-3 px-3 sm:px-5 lg:px-8">
-          <div className="flex min-w-0 items-center">
-            {headerContent ? <div className="hidden min-w-0 lg:block">{headerContent}</div> : null}
+          <div className="flex min-w-0 flex-1 items-center">
+            {activeNavItem ? (
+              isTopLevelPage ? (
+                <h1 className="truncate font-serif text-2xl leading-none font-normal tracking-[-0.03em] sm:hidden">
+                  {activeNavItem.label}
+                </h1>
+              ) : (
+                <span className="truncate font-serif text-2xl leading-none font-normal tracking-[-0.03em] sm:hidden">
+                  {activeNavItem.label}
+                </span>
+              )
+            ) : null}
+            {headerContent ? <div className="hidden min-w-0 sm:block">{headerContent}</div> : null}
           </div>
           <nav
             className="flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 bg-card p-1 shadow-[0_1px_0_rgb(255_255_255/80%),0_8px_24px_rgb(21_61_45/5%)]"
@@ -61,11 +76,13 @@ export const AppShell = () => {
                 key={item.to}
                 to={item.to}
                 end={"end" in item ? item.end : undefined}
+                aria-label={item.label}
+                title={item.label}
                 onFocus={() => void item.preload()}
                 onMouseEnter={() => void item.preload()}
                 className={({ isActive }) =>
                   cn(
-                    "flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground sm:px-3",
+                    "flex h-10 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-muted-foreground transition-all hover:bg-muted/70 hover:text-foreground sm:h-8",
                     isActive &&
                       "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
                   )
